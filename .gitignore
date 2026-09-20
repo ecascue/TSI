@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+*.log
+# Nunca subas copias de seguridad con datos personales
+copia-*.txt
+copia-*.json
