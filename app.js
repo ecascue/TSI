@@ -459,10 +459,17 @@ function progresoDocs(c){
 function tDocs(c){
   const p=progresoDocs(c);
   return '<section class="tarjeta"><p id="docs-txt"><strong>'+p.txt+'</strong></p><div class="barra" aria-hidden="true"><i id="docs-barra" style="width:'+p.pct+'%"></i></div>'
-  +(c.docs.length?'<ul class="lista" style="margin:0 -1rem -1rem;border-top:1px solid var(--linea)">'+c.docs.map(d=>'<li class="doc"><label><input type="checkbox" data-doc="'+d.id+'"'+(d.ok?' checked':'')+'><span>'+esc(d.t)+'</span></label><button class="btn texto chico" data-a="doc-del" data-id="'+d.id+'">Quitar</button></li>').join('')+'</ul>':'<div class="vacio">La lista está vacía. Carga una lista orientativa según el trámite o añade documentos a mano.</div>')+'</section>'
-  +'<section class="tarjeta"><h3>Añadir documento</h3><div class="fila-add"><input id="doc-nuevo" type="text" aria-label="Nuevo documento" placeholder="Por ejemplo: certificado de empadronamiento"><button class="btn" data-a="doc-add">Añadir</button></div></section>'
-  +'<section class="tarjeta"><h3>Cargar lista orientativa</h3><div class="fila-add"><select id="doc-tram" aria-label="Trámite">'+opts(Object.keys(TRAM).filter(k=>TRAM[k].items.length).map(k=>[k,TRAM[k].t]),TRAM[c.tramite]&&TRAM[c.tramite].items.length?c.tramite:'arraigo_social')+'</select><button class="btn" data-a="doc-load">Cargar lista</button></div>'
-  +'<div class="aviso">Las listas son orientativas y editables. Los requisitos cambian con la normativa: confirma siempre los vigentes con la Oficina de Extranjería o la resolución aplicable.</div></section>';
+  +(c.docs.length?'<ul class="lista" style="margin:0 -1rem -1rem;border-top:1px solid var(--linea)">'+c.docs.map(d=>'<li class="doc"><label><input type="checkbox" data-doc="'+d.id+'"'+(d.ok?' checked':'')+'><span style="flex:1;">'+esc(d.t)+(d.url?' <a href="'+d.url+'" target="_blank" class="btn texto chico" style="margin-left:.5rem">Ver archivo 📎</a>':'')+'</span></label><button class="btn texto chico peligro" data-a="doc-del" data-id="'+d.id+'">Quitar</button></li>').join('')+'</ul>':'<div class="vacio">La lista está vacía. Sube documentos reales o carga listas orientativas.</div>')+'</section>'
+  
+  // SECCIÓN PARA SUBIR ARCHIVOS REALES
+  +'<section class="tarjeta"><h3>Subir documento real (PDF o imagen)</h3><div class="grid dos">'
+    +'<label class="campo"><span>Nombre o descripción del documento</span><input id="doc-nombre-archivo" type="text" placeholder="Ej. Contrato de trabajo firmado"></label>'
+    +'<label class="campo"><span>Seleccionar archivo</span><input id="doc-file-input" type="file" accept=".pdf,image/*" style="padding:.35rem;"></label>'
+  +'</div>'
+  +'<div class="acciones"><button class="btn primario" data-a="doc-upload">Subir y adjuntar archivo</button></div><p id="doc-subida-msg" class="nota"></p></section>'
+
+  +'<section class="tarjeta"><h3>Cargar lista orientativa de requisitos</h3><div class="fila-add"><select id="doc-tram" aria-label="Trámite">'+opts(Object.keys(TRAM).filter(k=>TRAM[k].items.length).map(k=>[k,TRAM[k].t]),TRAM[c.tramite]&&TRAM[c.tramite].items.length?c.tramite:'arraigo_social')+'</select><button class="btn" data-a="doc-load">Cargar lista</button></div>'
+  +'<div class="aviso">Las listas son orientativas. Los archivos reales que subas se almacenarán de forma segura vinculados a este expediente.</div></section>';
 }
 
 function filaPlazo(p,conCaso){
