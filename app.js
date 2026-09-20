@@ -142,8 +142,22 @@ function semillas(){
 function vacio(){return {v:1,casos:[],plazos:[],recursos:semillas()};}
 function normalizar(s){
   const b=Object.assign(vacio(),s||{});
-  b.casos=(b.casos||[]).map(c=>Object.assign({seg:[],docs:[],der:[],vul:[],idiomas_lista:[],estado:'abierto',situacion:'otra',tramite:'ninguno',creado:hoy(),actualizado:new Date().toISOString()},c));
-  b.plazos=b.plazos||[];b.recursos=b.recursos||[];
+  const hoyStr = hoy();
+  
+  b.casos=(b.casos||[]).map(c => {
+    // Si el caso está cerrado y tiene fecha de cierre registrada...
+    if(c.estado === 'cerrado' && c.cierre) {
+      const diasPasados = diff(c.cierre, hoyStr);
+      // Si han pasado 15 días o más, se archiva automáticamente
+      if(diasPasados >= 15) {
+        c.estado = 'archivado';
+      }
+    }
+    return Object.assign({seg:[],docs:[],der:[],vul:[],idiomas_lista:[],estado:'abierto',situacion:'otra',tramite:'ninguno',creado:hoy(),actualizado:new Date().toISOString()}, c);
+  });
+
+  b.plazos=b.plazos||[];
+  b.recursos=b.recursos||[];
   return b;
 }
 function cargar(){
