@@ -628,12 +628,21 @@ function accion(a,el){
     case 'tab':ui.tab=el.dataset.t;render(true);break;
     
     // Ciclo de estado: Abierto -> Cerrado -> Archivado
-    case 'estado':
-      if(c.estado==='abierto') c.estado='cerrado';
-      else if(c.estado==='cerrado') c.estado='archivado';
-      else c.estado='abierto';
-      c.cierre=c.estado!=='abierto'?hoy():'';
-      tocar(c);render(true);toast('Estado actualizado a: '+c.estado);
+   case 'estado':
+      if(c.estado==='abierto') {
+        c.estado='cerrado';
+        c.cierre=hoy(); // Guardamos el día exacto en que se cerró
+      }
+      else if(c.estado==='cerrado') {
+        c.estado='archivado';
+      }
+      else {
+        c.estado='abierto';
+        c.cierre='';
+      }
+      tocar(c);
+      render(true);
+      toast('Estado actualizado a: '+c.estado);
       break;
 
     case 'desbloquear-archivados':
