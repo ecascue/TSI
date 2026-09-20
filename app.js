@@ -365,26 +365,40 @@ function vCaso(c){
 
 function tFicha(c){
   const g=(t,sub,cont)=>'<section class="grupo"><div class="grupo-cab"><h3>'+t+'</h3>'+(sub?'<p class="nota">'+sub+'</p>':'')+'</div>'+cont+'</section>';
-  return '<p class="nota">Los cambios se guardan solos al salir de cada campo.</p>'
+  
+  // Niveles de idioma disponibles
+  const nivelesIdiomas = [['','Seleccionar nivel'],['bajo','Bajo'],['medio','Medio'],['alto','Alto'],['nativo','Nativo']];
+  
+  return '<p class="nota">Los cambios se guardan al pulsar el botón de guardar al final o salir del campo.</p>'
   +g('Datos personales','','<div class="grid dos">'
     +inp(c,'nombre','Nombre o alias','text','Puedes usar iniciales si prefieres no guardar el nombre completo.')
     +inp(c,'codigo','Código interno')
     +inp(c,'pais','País de origen')
-    +inp(c,'idiomas','Idiomas y nivel de castellano')
+    +'<label class="campo"><span>Idioma principal</span><input type="text" data-f="idiomas" value="'+esc(c.idiomas||'')+'" placeholder="Ej. Árabe, Francés..."></label>'
+    +'<label class="campo"><span>Nivel de castellano</span><select data-f="nivel_castellano">'+opts(nivelesIdiomas, c.nivel_castellano||'')+'</select></label>'
     +inp(c,'nacimiento','Fecha de nacimiento','date')
     +inp(c,'llegada','Fecha de llegada a España','date')
     +'<label class="campo"><span>Género</span><select data-f="genero">'+opts(GENS,c.genero||'')+'</select></label>'
     +inp(c,'contacto','Teléfono o contacto')+'</div>')
+  
   +g('Situación administrativa','Determina el sello que aparece en la cabecera del caso.','<div class="grid dos">'
     +'<label class="campo"><span>Situación administrativa</span><select data-f="situacion">'+opts(Object.keys(SIT).map(k=>[k,SIT[k].t]),c.situacion)+'</select></label>'
     +'<label class="campo"><span>Trámite en curso</span><select data-f="tramite">'+opts(Object.keys(TRAM).map(k=>[k,TRAM[k].t]),c.tramite)+'</select></label></div>')
+  
   +g('Situación social','','<div class="grid dos">'
     +'<label class="campo"><span>Vivienda</span><select data-f="vivienda">'+opts(VIV,c.vivienda||'')+'</select></label>'
     +'<label class="campo"><span>Situación laboral</span><select data-f="empleo">'+opts(EMP,c.empleo||'')+'</select></label>'
     +'<label class="campo full"><span>Composición familiar y convivencia</span><textarea rows="3" data-f="familia">'+esc(c.familia||'')+'</textarea></label></div>')
+  
   +g('Factores de vulnerabilidad','Marca los que apliquen.','<fieldset><div class="checks">'+VUL.map(v=>'<label class="check"><input type="checkbox" data-vul="'+v[0]+'"'+(c.vul.includes(v[0])?' checked':'')+'><span>'+v[1]+'</span></label>').join('')+'</div></fieldset>')
+  
   +g('Observaciones','','<label class="campo"><span class="nota">Cualquier dato útil que no encaje en otro campo</span><textarea rows="4" data-f="notas">'+esc(c.notas||'')+'</textarea></label>')
-  +'<div class="acciones"><button class="btn peligro" data-a="borrar-caso">Eliminar caso</button></div>';
+  
+  // Botones fijos al pie del formulario para que no tengas que subir
+  +'<div class="acciones" style="background:var(--hoja); padding:1rem; border:1px solid var(--linea); border-radius:var(--r); margin-top:2rem; display:flex; justify-content:space-between; align-items:center;">'
+    +'<button class="btn primario" data-a="guardar-caso">Guardar cambios del caso</button>'
+    +'<button class="btn peligro" data-a="borrar-caso">Eliminar caso</button>'
+  +'</div>';
 }
 
 function tSeg(c){
