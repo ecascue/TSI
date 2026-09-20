@@ -1,14 +1,10 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Cuaderno migratorio</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap" rel="stylesheet">
-<!-- Enlace a tu archivo CSS -->
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuaderno Migratorio - SaaS</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- Pantalla de Login -->
@@ -21,11 +17,11 @@
       <form id="login-form" class="grid">
         <label class="campo">
           <span>Correo electrónico</span>
-          <input type="email" id="login-email" required placeholder="usuario@entidad.org">
+          <input type="email" id="login-email" required placeholder="usuario@entidad.org" autocomplete="email">
         </label>
         <label class="campo">
           <span>Contraseña</span>
-          <input type="password" id="login-pass" required>
+          <input type="password" id="login-pass" required autocomplete="current-password">
         </label>
         <button type="submit" class="btn primario" style="margin-top:.5rem">Iniciar sesión</button>
       </form>
@@ -33,16 +29,33 @@
     </div>
   </div>
 
-  <!-- Aplicación principal (Oculta por defecto) -->
+  <!-- Aplicación principal (Oculta por defecto hasta iniciar sesión) -->
   <div class="app" id="app-root" hidden>
     <nav class="nav" aria-label="Secciones">
-      <div class="marca"><span class="logo">CM</span><span>Cuaderno migratorio<small>Seguimiento de casos</small></span></div>
-      <button data-a="nav" data-v="inicio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Inicio</span></button>
-      <button data-a="nav" data-v="casos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Casos</span></button>
-      <button data-a="nav" data-v="recursos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Recursos</span></button>
-      <button data-a="nav" data-v="memoria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Memoria</span></button>
-      <!-- Hemos quitado el botón de "Copias" porque ya no hará falta con la base de datos -->
-      <button data-a="logout" style="margin-top:auto"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Salir</span></button>
+      <div class="marca">
+        <span class="logo">CM</span>
+        <span>Cuaderno migratorio<small>Seguimiento de casos</small></span>
+      </div>
+      <button data-a="nav" data-v="inicio">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button data-a="nav" data-v="casos">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span>Casos</span>
+      </button>
+      <button data-a="nav" data-v="recursos">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        <span>Recursos</span>
+      </button>
+      <button data-a="nav" data-v="memoria">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span>Memoria</span>
+      </button>
+      <button data-a="logout" style="margin-top:auto">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        <span>Salir</span>
+      </button>
     </nav>
     <main id="main" tabindex="-1"></main>
   </div>
@@ -51,15 +64,11 @@
   <div id="modal-root"></div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script src="[https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js](https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js)"></script>
-  
-  <script src="app.js"></script>
-  <div id="modal-root"></div>
-  <div id="toast" role="status" aria-live="polite"></div>
-
-  <!-- 1. Cargar Supabase primero -->
+  <!-- Librería cliente de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- 2. Luego cargar tu código -->
+  <!-- Librería jsPDF para descarga de informes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Tu archivo JavaScript de la lógica -->
   <script src="app.js"></script>
 </body>
 </html>
