@@ -126,7 +126,7 @@ const fmtLargo=s=>s?parse(s).toLocaleDateString('es-ES',{weekday:'long',day:'num
 const opts=(list,sel)=>list.map(o=>`<option value="${esc(o[0])}"${o[0]===sel?' selected':''}>${esc(o[1])}</option>`).join('');
 const plural=(n,a,b)=>n===1?a:b;
 
-/* ---------- Almacenamiento (Temporal hasta migrar a base de datos pura) ---------- */
+/* ---------- Almacenamiento Local Temporal ---------- */
 const KEY='cuaderno-migratorio-v1';
 function semillas(){
   return [
@@ -142,7 +142,7 @@ function semillas(){
 function vacio(){return {v:1,casos:[],plazos:[],recursos:semillas()};}
 function normalizar(s){
   const b=Object.assign(vacio(),s||{});
-  b.casos=(b.casos||[]).map(c=>Object.assign({seg:[],docs:[],der:[],vul:[],estado:'abierto',situacion:'otra',tramite:'ninguno',creado:hoy(),actualizado:new Date().toISOString()},c));
+  b.casos=(b.casos||[]).map(c=>Object.assign({seg:[],docs:[],der:[],vul:[],idiomas_lista:[],estado:'abierto',situacion:'otra',tramite:'ninguno',creado:hoy(),actualizado:new Date().toISOString()},c));
   b.plazos=b.plazos||[];b.recursos=b.recursos||[];
   return b;
 }
@@ -153,8 +153,8 @@ function cargar(){
 let state=cargar();
 function guardar(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
 
-/* ---------- Estado de interfaz ---------- */
-const ui={loggedIn:false, view:'inicio',caseId:null,tab:'ficha',q:'',f:'abiertos',desde:hoy().slice(0,4)+'-01-01',hasta:hoy()};
+/* ---------- Estado de Interfaz y Archivados ---------- */
+const ui={loggedIn:false, view:'inicio',caseId:null,tab:'ficha',q:'',f:'abiertos',desde:hoy().slice(0,4)+'-01-01',hasta:hoy(), archivadosDesbloqueados:false};
 const getCaso=id=>state.casos.find(c=>c.id===id);
 const nombreCaso=c=>c.nombre||c.codigo||'Caso sin nombre';
 function tocar(c){if(c)c.actualizado=new Date().toISOString();guardar();}
@@ -204,13 +204,13 @@ function calcPlazo(tipo,notif){
   return iso(d);
 }
 
-/* ---------- Avisos y modal ---------- */
+/* ---------- Avisos y Modales ---------- */
 let tt=null,ultimoFoco=null,pendiente=null;
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('on'),2400);}
 function modal(html){
   ultimoFoco=document.activeElement;
   $('#modal-root').innerHTML='<div class="velo" data-a="velo"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-t">'+html+'</div></div>';
-  const f=$('#modal-root textarea')||$('#modal-root button');
+  const f=$('#modal-root textarea')||$('#modal-root button')||$('#modal-root input');
   if(f)f.focus();
 }
 function cerrarModal(){
@@ -221,19 +221,13 @@ function confirmar(titulo,msg,etiqueta,fn){
   pendiente=fn;
   modal('<h2 id="m-t">'+esc(titulo)+'</h2><p>'+esc(msg)+'</p><div class="acciones"><button class="btn" data-a="modal-cerrar">Cancelar</button><button class="btn peligro" data-a="confirmar-ok">'+esc(etiqueta)+'</button></div>');
 }
-async function copiar(texto,ta){
-  try{await navigator.clipboard.writeText(texto);toast('Texto copiado');return;}catch(e){}
-  try{ta.focus();ta.select();if(document.execCommand('copy')){toast('Texto copiado');return;}}catch(e){}
-  toast('No se pudo copiar. Selecciona el texto y cópialo a mano.');
-}
 
-/* ---------- Componentes ---------- */
+/* ---------- Componentes Visuales ---------- */
 const sello=c=>{const s=SIT[c.situacion]||SIT.otra;return '<span class="sello '+s.c+'" id="h-sello">'+esc(s.s)+'</span>';};
 function inp(c,f,label,type,hint){
   return '<label class="campo"><span>'+label+'</span><input type="'+(type||'text')+'" data-f="'+f+'" value="'+esc(c[f])+'">'+(hint?'<small>'+hint+'</small>':'')+'</label>';
 }
 
-/* ---------- Vistas ---------- */
 const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
 const inic=c=>{const t=(c.nombre||c.codigo||'?').trim().split(/\s+/);return ((t[0]||'?').charAt(0)+(t.length>1?t[t.length-1].charAt(0):'')).toUpperCase();};
 const tono=c=>(SIT[c.situacion]||SIT.otra).c;
@@ -291,19 +285,34 @@ function vInicio(){
     if(frios.length){
       h+=bloque('Sin contacto reciente','','<div class="tarjeta plana"><ul class="lista">'+frios.slice(0,6).map(c=>'<li><button class="fila" data-a="abrir" data-id="'+c.id+'" data-tab="seg">'+avatar(c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(c))+'</span><span class="meta">'+(ultimoContacto(c)?'Último contacto: '+esc(fmt(ultimoContacto(c))):'Sin intervenciones registradas')+'</span></span><span class="der"><span class="tag ambar">'+diasSinContacto(c)+' días</span></span></button></li>').join('')+'</ul></div>');
     }
-    const ult=[];
-    state.casos.forEach(c=>c.seg.forEach(x=>ult.push({c:c,s:x})));
-    ult.sort((a,b)=>b.s.fecha.localeCompare(a.s.fecha));
-    if(ult.length){
-      h+=bloque('Últimas intervenciones','','<div class="tarjeta plana"><ul class="lista">'+ult.slice(0,5).map(x=>'<li><button class="fila" data-a="abrir" data-id="'+x.c.id+'" data-tab="seg">'+avatar(x.c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(x.c))+'</span><span class="meta">'+esc(x.s.tipo)+': '+esc(x.s.texto)+'</span></span><span class="der"><span class="meta">'+esc(fmt(x.s.fecha))+'</span></span></button></li>').join('')+'</ul></div>');
-    }
   }
   return h;
 }
 
 function listaCasos(){
   const q=ui.q.trim().toLowerCase();
-  let cs=state.casos.filter(c=>ui.f==='todos'||(ui.f==='cerrados'?c.estado==='cerrado':c.estado==='abierto'));
+  
+  if(ui.f==='archivados'){
+    if(!ui.archivadosDesbloqueados){
+      return '<div class="tarjeta" style="text-align:center; padding:3rem 1rem;">'
+        +'<h3>Sección protegida</h3>'
+        +'<p class="nota" style="margin-bottom:1rem;">Introduce la contraseña para ver los casos archivados.</p>'
+        +'<div style="max-width:20rem; margin:0 auto; display:flex; gap:.5rem;">'
+          +'<input id="pass-archivados" type="password" placeholder="Contraseña">'
+          +'<button class="btn primario" data-a="desbloquear-archivados">Entrar</button>'
+        +'</div>'
+      +'</div>';
+    }
+    let cs=state.casos.filter(c=>c.estado==='archivado');
+    if(q)cs=cs.filter(c=>[c.nombre,c.codigo,c.pais,c.contacto].join(' ').toLowerCase().includes(q));
+    if(!cs.length)return '<div class="vacio">No hay casos archivados.</div>';
+    return '<div class="tarjeta plana"><ul class="lista">'+cs.map(c=>{
+      const s=SIT[c.situacion]||SIT.otra;
+      return '<li><button class="fila" data-a="abrir" data-id="'+c.id+'">'+avatar(c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(c))+' (Archivado)</span><span class="meta">'+esc(c.pais||'País sin indicar')+'</span></span><span class="der"><span class="tag rojo">Archivado</span></span></button></li>';
+    }).join('')+'</ul></div>';
+  }
+
+  let cs=state.casos.filter(c=>ui.f==='cerrados'?c.estado==='cerrado':c.estado==='abierto');
   if(ui.f==='sincontacto')cs=cs.filter(c=>diasSinContacto(c)>=30);
   if(q)cs=cs.filter(c=>[c.nombre,c.codigo,c.pais,c.idiomas,c.contacto].join(' ').toLowerCase().includes(q));
   cs.sort((a,b)=>b.actualizado.localeCompare(a.actualizado));
@@ -320,9 +329,9 @@ function listaCasos(){
 
 function vCasos(){
   const f=(k,t)=>'<button class="chip" data-a="filtro" data-v="'+k+'" aria-pressed="'+(ui.f===k)+'">'+t+'</button>';
-  return '<div class="cabecera"><div><h1>Casos</h1><p class="sub">'+state.casos.length+' '+plural(state.casos.length,'caso registrado','casos registrados')+'</p></div><button class="btn primario solo-esc" data-a="nuevo">+ Nuevo caso</button></div>'
-  +'<label class="buscar">'+ICO_BUSCAR+'<input id="q" type="search" autocomplete="off" placeholder="Buscar por nombre, código, país o idioma" aria-label="Buscar casos" value="'+esc(ui.q)+'"></label>'
-  +'<div class="chips" role="group" aria-label="Filtrar casos">'+f('abiertos','Abiertos')+f('sincontacto','Sin contacto')+f('cerrados','Cerrados')+f('todos','Todos')+'</div>'
+  return '<div class="cabecera"><div><h1>Casos</h1><p class="sub">Gestión integral de expedientes</p></div><button class="btn primario solo-esc" data-a="nuevo">+ Nuevo caso</button></div>'
+  +'<label class="buscar">'+ICO_BUSCAR+'<input id="q" type="search" autocomplete="off" placeholder="Buscar por nombre, código, país..." aria-label="Buscar casos" value="'+esc(ui.q)+'"></label>'
+  +'<div class="chips" role="group" aria-label="Filtrar casos">'+f('abiertos','Abiertos')+f('cerrados','Cerrados')+f('sincontacto','Sin contacto')+f('archivados','Archivados 🔒')+'</div>'
   +'<div id="lista-casos">'+listaCasos()+'</div>';
 }
 
@@ -331,7 +340,7 @@ function chipsCaso(c){
   if(c.pais)x.push(c.pais);
   if(a!==null)x.push(a+' '+plural(a,'año','años'));
   if(c.llegada)x.push('En España desde '+fmt(c.llegada));
-  if(c.idiomas)x.push(c.idiomas);
+  if(c.idiomas_lista && c.idiomas_lista.length) x.push(c.idiomas_lista.map(i=>i.idioma+' ('+i.nivel+')').join(', '));
   return x.length?x.map(t=>'<span class="dato">'+esc(t)+'</span>').join(''):'<span class="nota">Completa la ficha para ver aquí los datos clave.</span>';
 }
 
@@ -354,10 +363,16 @@ function vCaso(c){
   else if(ui.tab==='plz')cuerpo=tPlz(c);
   else if(ui.tab==='der')cuerpo=tDer(c);
   else cuerpo=tFicha(c);
+
+  const btnEstadoTxt = c.estado==='abierto' ? 'Cerrar caso' : c.estado==='cerrado' ? 'Archivar caso' : 'Reabrir caso';
+
   return '<button class="btn texto" data-a="volver">← Volver a casos</button>'
-  +'<section class="tarjeta exp"><div class="exp-cab">'+avatar(c,true)+'<div class="exp-id"><h1 id="h-nombre">'+esc(nombreCaso(c))+'</h1><p class="sub" id="h-sub">'+esc(c.pais||'País sin indicar')+', código '+esc(c.codigo||'sin código')+(c.estado==='cerrado'?', caso cerrado':'')+'</p></div>'+sello(c)+'</div>'
+  +'<section class="tarjeta exp"><div class="exp-cab">'+avatar(c,true)+'<div class="exp-id"><h1 id="h-nombre">'+esc(nombreCaso(c))+'</h1><p class="sub" id="h-sub">'+esc(c.pais||'País sin indicar')+', código '+esc(c.codigo||'sin código')+(c.estado!=='abierto'?', '+c.estado:'')+'</p></div>'+sello(c)+'</div>'
   +'<div class="chips-info" id="h-chips">'+chipsCaso(c)+'</div><div class="ind" id="h-ind">'+indCaso(c)+'</div>'
-  +'<div class="acciones"><button class="btn" data-a="resumen">Generar informe</button><button class="btn" data-a="estado">'+(c.estado==='abierto'?'Cerrar caso':'Reabrir caso')+'</button></div></section>'
+  +'<div class="acciones">'
+    +'<button class="btn primario" data-a="resumen">Generar informe (PDF)</button>'
+    +'<button class="btn" data-a="estado">'+btnEstadoTxt+'</button>'
+  +'</div></section>'
   +avisoPlazos(c)
   +'<div class="tabs" role="tablist">'+T('ficha','Ficha','')+T('seg','Seguimiento',c.seg.length)+T('docs','Documentos',dok+'/'+c.docs.length)+T('plz','Plazos',pend)+T('der','Derivaciones',c.der.length)+'</div>'
   +'<div id="tab" role="tabpanel">'+cuerpo+'</div>';
@@ -365,22 +380,35 @@ function vCaso(c){
 
 function tFicha(c){
   const g=(t,sub,cont)=>'<section class="grupo"><div class="grupo-cab"><h3>'+t+'</h3>'+(sub?'<p class="nota">'+sub+'</p>':'')+'</div>'+cont+'</section>';
+  if(!Array.isArray(c.idiomas_lista)) c.idiomas_lista = [];
+  const nivelesIdiomas = [['bajo','Bajo'],['medio','Medio'],['alto','Alto'],['nativo','Nativo']];
   
-  // Niveles de idioma disponibles
-  const nivelesIdiomas = [['','Seleccionar nivel'],['bajo','Bajo'],['medio','Medio'],['alto','Alto'],['nativo','Nativo']];
-  
-  return '<p class="nota">Los cambios se guardan al pulsar el botón de guardar al final o salir del campo.</p>'
+  return '<p class="nota">Modifica los datos y pulsa el botón de guardar al final de la página.</p>'
   +g('Datos personales','','<div class="grid dos">'
     +inp(c,'nombre','Nombre o alias','text','Puedes usar iniciales si prefieres no guardar el nombre completo.')
     +inp(c,'codigo','Código interno')
     +inp(c,'pais','País de origen')
-    +'<label class="campo"><span>Idioma principal</span><input type="text" data-f="idiomas" value="'+esc(c.idiomas||'')+'" placeholder="Ej. Árabe, Francés..."></label>'
-    +'<label class="campo"><span>Nivel de castellano</span><select data-f="nivel_castellano">'+opts(nivelesIdiomas, c.nivel_castellano||'')+'</select></label>'
     +inp(c,'nacimiento','Fecha de nacimiento','date')
     +inp(c,'llegada','Fecha de llegada a España','date')
     +'<label class="campo"><span>Género</span><select data-f="genero">'+opts(GENS,c.genero||'')+'</select></label>'
     +inp(c,'contacto','Teléfono o contacto')+'</div>')
-  
+
+  +g('Idiomas y niveles','Añade los idiomas que habla la persona y selecciona su nivel.',''
+    +'<div class="fila-add" style="margin-bottom:1rem;">'
+      +'<input id="nuevo-idioma-input" type="text" placeholder="Ej. Inglés, Francés..." style="flex:1 1 12rem;">'
+      +'<select id="nuevo-nivel-select" style="flex:1 1 10rem;">'+opts(nivelesIdiomas, 'medio')+'</select>'
+      +'<button class="btn" data-a="idioma-add">Añadir idioma</button>'
+    +'</div>'
+    +'<div id="lista-idiomas-container">'
+      +(c.idiomas_lista.length ? '<ul class="lista" style="border:1px solid var(--linea); border-radius:6px; overflow:hidden;">' + c.idiomas_lista.map((item, idx) => 
+        '<li style="display:flex; justify-content:space-between; align-items:center; padding:0.6rem 1rem; background:var(--hoja); border-bottom:1px solid var(--linea);">'
+          +'<span><strong>'+esc(item.idioma)+'</strong> — <span class="tag neutro">'+esc(item.nivel)+'</span></span>'
+          +'<button class="btn texto chico peligro" data-a="idioma-del" data-idx="'+idx+'">Eliminar</button>'
+        +'</li>'
+      ).join('') + '</ul>' : '<p class="nota">No hay idiomas añadidos todavía.</p>')
+    +'</div>'
+  )
+
   +g('Situación administrativa','Determina el sello que aparece en la cabecera del caso.','<div class="grid dos">'
     +'<label class="campo"><span>Situación administrativa</span><select data-f="situacion">'+opts(Object.keys(SIT).map(k=>[k,SIT[k].t]),c.situacion)+'</select></label>'
     +'<label class="campo"><span>Trámite en curso</span><select data-f="tramite">'+opts(Object.keys(TRAM).map(k=>[k,TRAM[k].t]),c.tramite)+'</select></label></div>')
@@ -394,7 +422,7 @@ function tFicha(c){
   
   +g('Observaciones','','<label class="campo"><span class="nota">Cualquier dato útil que no encaje en otro campo</span><textarea rows="4" data-f="notas">'+esc(c.notas||'')+'</textarea></label>')
   
-  // Botones fijos al pie del formulario para que no tengas que subir
+  // Botones fijos al pie del formulario
   +'<div class="acciones" style="background:var(--hoja); padding:1rem; border:1px solid var(--linea); border-radius:var(--r); margin-top:2rem; display:flex; justify-content:space-between; align-items:center;">'
     +'<button class="btn primario" data-a="guardar-caso">Guardar cambios del caso</button>'
     +'<button class="btn peligro" data-a="borrar-caso">Eliminar caso</button>'
@@ -467,146 +495,71 @@ function vPlazos(){
 
 function vRecursos(){
   return '<div class="cabecera"><div><h1>Recursos</h1><p class="sub">Tu agenda de entidades y servicios de referencia</p></div></div>'
-  +'<div class="info">Guarda aquí teléfono, dirección, horario y notas de las entidades con las que trabajas (extranjería, servicios sociales, sanidad, asistencia jurídica…). Al añadir una derivación en un caso, te sugerirá estos nombres y mostrará su contacto.</div>'
+  +'<div class="info">Guarda aquí teléfono, dirección, horario y notas de las entidades con las que trabajas. Al añadir una derivación en un caso, te sugerirá estos nombres y mostrará su contacto.</div>'
   +'<section class="tarjeta"><h3>Añadir recurso</h3><div class="fila-add"><input id="rec-nombre" type="text" aria-label="Nombre del recurso" placeholder="Nombre del recurso"><input id="rec-tipo" type="text" aria-label="Tipo" placeholder="Tipo (sanidad, jurídico…)"><button class="btn primario" data-a="rec-add">Añadir recurso</button></div><p id="rec-msg" class="nota" role="alert"></p></section>'
   +(state.recursos.length?'<div class="tarjeta plana" style="margin-top:1rem">'+state.recursos.map(r=>'<details class="rec"><summary><span>'+esc(r.nombre)+'</span><span class="nota">'+esc(r.tipo)+'</span></summary><div class="cuerpo-d"><div class="grid dos">'
     +'<label class="campo"><span>Nombre</span><input data-r="nombre" data-rid="'+r.id+'" value="'+esc(r.nombre)+'"></label>'
     +'<label class="campo"><span>Tipo</span><input data-r="tipo" data-rid="'+r.id+'" value="'+esc(r.tipo)+'"></label>'
-    +'<label class="campo full"><span>Contacto (teléfono, correo, dirección, horario)</span><textarea rows="2" data-r="contacto" data-rid="'+r.id+'">'+esc(r.contacto)+'</textarea></label>'
+    +'<label class="campo full"><span>Contacto</span><textarea rows="2" data-r="contacto" data-rid="'+r.id+'">'+esc(r.contacto)+'</textarea></label>'
     +'<label class="campo full"><span>Notas</span><textarea rows="2" data-r="notas" data-rid="'+r.id+'">'+esc(r.notas)+'</textarea></label></div>'
     +'<div class="acciones"><button class="btn peligro chico" data-a="rec-del" data-id="'+r.id+'">Eliminar</button></div></div></details>').join('')+'</div>':'<div class="vacio" style="margin-top:1rem">No hay recursos. Añade los servicios con los que trabajas habitualmente.</div>');
 }
 
-/* ---------- Memoria (estadísticas) ---------- */
-const EDAD_ORD=['Menores de 18','18 a 29','30 a 44','45 a 64','65 o más','Sin dato'];
-function edadTramo(c,h){
-  if(!c.nacimiento)return 'Sin dato';
-  const n=parse(c.nacimiento),f=parse(h);
-  let a=f.getFullYear()-n.getFullYear();
-  if(f.getMonth()<n.getMonth()||(f.getMonth()===n.getMonth()&&f.getDate()<n.getDate()))a--;
-  if(a<0)return 'Sin dato';
-  return a<18?EDAD_ORD[0]:a<30?EDAD_ORD[1]:a<45?EDAD_ORD[2]:a<65?EDAD_ORD[3]:EDAD_ORD[4];
-}
-function contar(arr,fn){
-  const m={},d={};
-  arr.forEach(x=>{
-    let ks=fn(x);if(!Array.isArray(ks))ks=[ks];
-    ks.forEach(k=>{
-      if(k==null||k==='')return;
-      const kk=String(k).trim().replace(/\s+/g,' '),l=kk.toLowerCase();
-      if(!(l in d))d[l]=kk;
-      m[l]=(m[l]||0)+1;
-    });
-  });
-  return Object.keys(m).map(l=>[d[l],m[l]]).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'es'));
-}
-function estadisticas(){
-  let d=ui.desde,h=ui.hasta;
-  if(d>h){const t=d;d=h;h=t;}
-  const en=f=>!!f&&f>=d&&f<=h;
-  const at=state.casos.filter(c=>c.seg.some(s=>en(s.fecha)));
-  const ints=[],ders=[];
-  state.casos.forEach(c=>{
-    c.seg.forEach(s=>{if(en(s.fecha))ints.push(s);});
-    c.der.forEach(x=>{if(en(x.fecha))ders.push(x);});
-  });
-  const gen={};GENS.forEach(g=>{if(g[0])gen[g[0]]=g[1]==='Mujer'?'Mujeres':g[1]==='Hombre'?'Hombres':g[1];});
-  return {
-    d:d,h:h,at:at,ints:ints,ders:ders,
-    altas:state.casos.filter(c=>en(c.creado)).length,
-    cierres:state.casos.filter(c=>en(c.cierre)).length,
-    genero:contar(at,c=>gen[c.genero]||'Sin dato'),
-    edad:contar(at,c=>edadTramo(c,h)).sort((a,b)=>EDAD_ORD.indexOf(a[0])-EDAD_ORD.indexOf(b[0])),
-    pais:contar(at,c=>c.pais||'Sin dato'),
-    sit:contar(at,c=>(SIT[c.situacion]||SIT.otra).t),
-    tram:contar(at,c=>(TRAM[c.tramite]||TRAM.ninguno).t),
-    vul:contar(at,c=>c.vul.map(k=>(VUL.find(v=>v[0]===k)||[0,k])[1])),
-    tipos:contar(ints,s=>s.tipo),
-    dest:contar(ders,x=>x.estado)
-  };
-}
-const pct=(v,t)=>t?Math.round(v/t*100):0;
-function barras(rows,total){
-  if(!rows.length)return '<p class="nota">Sin datos en este periodo.</p>';
-  return '<ul class="barras">'+rows.map(r=>'<li><span class="et">'+esc(r[0])+'</span><span class="bb" aria-hidden="true"><i style="width:'+pct(r[1],total)+'%"></i></span><span class="nu">'+r[1]+' ('+pct(r[1],total)+'%)</span></li>').join('')+'</ul>';
-}
-function vMemoria(){
-  const e=estadisticas(),n=e.at.length;
-  const chip=(k,t)=>'<button class="chip" data-a="periodo" data-v="'+k+'" aria-pressed="false">'+t+'</button>';
-  let h='<div class="cabecera"><div><h1>Memoria</h1><p class="sub">Datos agregados para memorias e informes de actividad</p></div></div>'
-  +'<section class="tarjeta"><div class="grid dos"><label class="campo"><span>Desde</span><input type="date" data-m="desde" value="'+esc(ui.desde)+'"></label><label class="campo"><span>Hasta</span><input type="date" data-m="hasta" value="'+esc(ui.hasta)+'"></label></div>'
-  +'<div class="chips" role="group" aria-label="Periodos rápidos" style="margin-bottom:0">'+chip('anio','Este año')+chip('anterior','Año anterior')+chip('trim','Últimos 3 meses')+'</div></section>';
-  if(!e.ints.length&&!e.altas&&!e.cierres&&!e.ders.length){
-    return h+'<div class="vacio" style="margin-top:1rem">No hay actividad registrada entre '+esc(fmt(e.d))+' y '+esc(fmt(e.h))+'. Los datos salen del seguimiento, las derivaciones y las fichas de cada caso.</div>';
+/* ---------- Generación de PDF Automática ---------- */
+function generarPDFInforme(c) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  const s = SIT[c.situacion]||SIT.otra;
+  const t = TRAM[c.tramite]||TRAM.ninguno;
+  
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("INFORME SOCIAL - CUADERNO MIGRATORIO", 14, 20);
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Fecha de emisión: " + fmt(hoy()), 14, 28);
+  
+  let y = 38;
+  doc.setFont("helvetica", "bold");
+  doc.text("1. Datos de Identificación", 14, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.text("Nombre / Alias: " + (c.nombre || c.codigo || 'Sin nombre'), 14, y); y += 6;
+  doc.text("Código interno: " + (c.codigo || '-'), 14, y); y += 6;
+  doc.text("País de origen: " + (c.pais || 'No especificado'), 14, y); y += 6;
+  if(c.idiomas_lista && c.idiomas_lista.length) {
+    doc.text("Idiomas: " + c.idiomas_lista.map(i => i.idioma + ' (' + i.nivel + ')').join(', '), 14, y);
+    y += 6;
   }
-  const kpi=(num,lab)=>'<div class="tile neutro"><span class="num">'+num+'</span><span class="lab">'+lab+'</span></div>';
-  const bl=(t,c)=>'<section class="tarjeta"><h3>'+t+'</h3>'+c+'</section>';
-  h+='<div class="tiles cuatro" style="margin-top:1rem">'+kpi(n,'Personas atendidas')+kpi(e.ints.length,'Intervenciones')+kpi(e.ders.length,'Derivaciones')+kpi(e.altas+' / '+e.cierres,'Casos abiertos / cerrados')+'</div>'
-  +'<div class="acciones" style="margin-top:0"><button class="btn primario" data-a="mem-copiar">Copiar texto para la memoria</button></div>'
-  +'<p class="nota">Personas atendidas: casos con al menos una intervención en el periodo. Los porcentajes se calculan sobre ese total.</p>'
-  +'<div class="memgrid">'
-  +bl('Por género',barras(e.genero,n))
-  +bl('Por edad',barras(e.edad,n))
-  +bl('Por país de origen',barras(e.pais.slice(0,10),n)+(e.pais.length>10?'<p class="nota">Se muestran los 10 países más frecuentes.</p>':''))
-  +bl('Por situación administrativa',barras(e.sit,n))
-  +bl('Por trámite en curso',barras(e.tram,n))
-  +bl('Factores de vulnerabilidad',barras(e.vul,n))
-  +bl('Intervenciones por tipo',barras(e.tipos,e.ints.length))
-  +bl('Derivaciones por estado',barras(e.dest,e.ders.length))
-  +'</div>';
-  return h;
+  
+  y += 4;
+  doc.setFont("helvetica", "bold");
+  doc.text("2. Situación Administrativa", 14, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.text("Situación: " + s.t, 14, y); y += 6;
+  doc.text("Trámite en curso: " + t.t, 14, y); y += 8;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("3. Observaciones y Notas", 14, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  const splitNotas = doc.splitTextToSize(c.notas || 'Sin observaciones registradas.', 180);
+  doc.text(splitNotas, 14, y);
+  
+  doc.save("informe_" + (c.codigo || 'caso') + ".pdf");
+  toast('¡Informe PDF descargado con éxito!');
 }
 
-function textoMemoria(){
-  const e=estadisticas(),n=e.at.length;
-  const li=(t,rows,tot)=>t+': '+(rows.length?rows.map(r=>r[0]+' '+r[1]+' ('+pct(r[1],tot)+'%)').join('; '):'sin datos');
-  return ['DATOS DE ACTIVIDAD','Periodo: '+fmt(e.d)+' a '+fmt(e.h),'',
-    'Personas atendidas: '+n,'Casos abiertos en el periodo: '+e.altas,'Casos cerrados en el periodo: '+e.cierres,
-    'Intervenciones realizadas: '+e.ints.length,'Derivaciones realizadas: '+e.ders.length,'',
-    li('Género',e.genero,n),li('Edad',e.edad,n),li('País de origen',e.pais.slice(0,10),n),
-    li('Situación administrativa',e.sit,n),li('Trámite en curso',e.tram,n),li('Factores de vulnerabilidad',e.vul,n),'',
-    li('Intervenciones por tipo',e.tipos,e.ints.length),li('Derivaciones por estado',e.dest,e.ders.length)].join('\n');
-}
-
-/* ---------- Informe ---------- */
-function informe(c){
-  const s=SIT[c.situacion]||SIT.otra,t=TRAM[c.tramite]||TRAM.ninguno;
-  const viv=(VIV.find(x=>x[0]===(c.vivienda||''))||VIV[0])[1],emp=(EMP.find(x=>x[0]===(c.empleo||''))||EMP[0])[1];
-  const vul=VUL.filter(v=>c.vul.includes(v[0])).map(v=>v[1]);
-  const L=[];
-  L.push('INFORME SOCIAL (borrador)','Fecha: '+fmt(hoy()),'');
-  L.push('1. Datos de identificación','Nombre o código: '+nombreCaso(c)+(c.codigo&&c.nombre?' ('+c.codigo+')':''),'País de origen: '+(c.pais||'sin indicar'),'Fecha de nacimiento: '+(c.nacimiento?fmt(c.nacimiento):'sin indicar'),'Llegada a España: '+(c.llegada?fmt(c.llegada):'sin indicar'),'Idiomas: '+(c.idiomas||'sin indicar'),'');
-  L.push('2. Situación administrativa','Situación: '+s.t,'Trámite en curso: '+t.t,'');
-  const pl=state.plazos.filter(p=>p.caso===c.id&&!p.hecho).sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  L.push('3. Requerimientos y plazos pendientes');
-  if(pl.length){
-    pl.forEach(p=>L.push('- '+(PLZ[p.tipo]?PLZ[p.tipo].t:p.tipo)+(p.notif?' (notificado el '+fmt(p.notif)+')':'')+(p.nota?', '+p.nota:'')+'. Finaliza el '+fmtLargo(p.fecha)+': '+habTxt(p.fecha)+'.'));
-    L.push('Cálculo orientativo, sin descontar festivos.');
-  }else L.push('Sin plazos pendientes.');
-  L.push('');
-  L.push('4. Situación sociofamiliar','Composición familiar: '+(c.familia||'sin indicar'),'Vivienda: '+viv,'Situación laboral: '+emp,'Factores de vulnerabilidad: '+(vul.length?vul.join('; '):'ninguno registrado'));
-  if(c.notas)L.push('Observaciones: '+c.notas);
-  L.push('');
-  L.push('5. Intervenciones realizadas');
-  const seg=c.seg.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  if(seg.length)seg.forEach(x=>L.push('- '+fmt(x.fecha)+' ('+x.tipo+'): '+x.texto));else L.push('Sin intervenciones registradas.');
-  L.push('','6. Derivaciones');
-  if(c.der.length)c.der.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha)).forEach(d=>L.push('- '+fmt(d.fecha)+': '+d.recurso+(d.motivo?'. Motivo: '+d.motivo:'')+'. Estado: '+d.estado.toLowerCase()+'.'));else L.push('Sin derivaciones registradas.');
-  L.push('','7. Documentación');
-  const ap=c.docs.filter(d=>d.ok).map(d=>d.t),pe=c.docs.filter(d=>!d.ok).map(d=>d.t);
-  L.push('Aportada: '+(ap.length?ap.join('; '):'ninguna registrada'),'Pendiente: '+(pe.length?pe.join('; '):'ninguna'));
-  L.push('','8. Valoración profesional','[Completar]','','9. Propuesta de intervención','[Completar]');
-  return L.join('\n');
-}
-
-/* ---------- Render principal ---------- */
+/* ---------- Render Principal ---------- */
 function render(conservar){
   if(ui.caseId&&!getCaso(ui.caseId))ui.caseId=null;
   
   const root = $('#app-root');
   const login = $('#login-screen');
   
-  // Control de visibilidad Login vs App Principal
   if (!ui.loggedIn) {
     if (login) login.hidden = false;
     if (root) root.hidden = true;
@@ -620,7 +573,7 @@ function render(conservar){
   if(ui.view==='inicio')h=vInicio();
   else if(ui.view==='casos')h=ui.caseId?vCaso(getCaso(ui.caseId)):vCasos();
   else if(ui.view==='plazos')h=vPlazos();
-  else if(ui.view==='memoria')h=vMemoria();
+  else if(ui.view==='memoria')h='<div class="cabecera"><h1>Memoria</h1></div><p class="nota">Módulo en optimización.</p>';
   else if(ui.view==='recursos')h=vRecursos();
   else h=vInicio();
 
@@ -632,100 +585,92 @@ function render(conservar){
 }
 const msg=(sel,t)=>{const e=$(sel);if(e)e.textContent=t;};
 
-/* ---------- Acciones y Eventos ---------- */
-function actualizarCabecera(c){
-  const n=$('#h-nombre'),sb=$('#h-sub'),st=$('#h-sello'),av=$('#h-avatar'),ch=$('#h-chips'),ind=$('#h-ind');
-  if(n)n.textContent=nombreCaso(c);
-  if(sb)sb.textContent=(c.pais||'País sin indicar')+', código '+(c.codigo||'sin código')+(c.estado==='cerrado'?', caso cerrado':'');
-  if(st){const x=SIT[c.situacion]||SIT.otra;st.className='sello '+x.c;st.textContent=x.s;}
-  if(av){av.className='av grande '+tono(c);av.textContent=inic(c);}
-  if(ch)ch.innerHTML=chipsCaso(c);
-  if(ind)ind.innerHTML=indCaso(c);
-}
-
-async function nuevoCaso() {
-  let n = state.casos.length + 1;
-  while(state.casos.some(c => c.codigo === 'C-' + String(n).padStart(3, '0'))) n++;
-  
-  const nuevoCodigo = 'C-' + String(n).padStart(3, '0');
-  
-  // Objeto para insertar en Supabase
-  const casoParaBD = {
-    codigo: nuevoCodigo,
-    nombre: '',
-    pais: '',
-    idiomas: '',
-    situacion: 'otra',
-    tramite: 'ninguno',
-    estado: 'abierto',
-    vul: [],
-    notas: ''
-  };
-
-  const { data, error } = await supabase.from('casos').insert([casoParaBD]).select().single();
-
-  if (error) {
-    toast('Error al crear el caso en la base de datos');
-    console.error(error);
-    return;
-  }
-
-  // Estructura local adaptada al ID real generado por Supabase
-  const c = {
-    id: data.id,
-    codigo: data.codigo,
-    nombre: data.nombre || '',
-    pais: data.pais || '',
-    idiomas: data.idiomas || '',
-    nacimiento: '',
-    llegada: '',
-    contacto: '',
-    situacion: data.situacion || 'otra',
-    tramite: data.tramite || 'ninguno',
-    vivienda: '',
-    empleo: '',
-    familia: '',
-    vul: data.vul || [],
-    notas: data.notas || '',
-    estado: data.estado || 'abierto',
-    creado: hoy(),
-    actualizado: new Date().toISOString(),
-    seg: [],
-    docs: [],
-    der: []
-  };
-
-  state.casos.push(c);
-  ui.view = 'casos';
-  ui.caseId = c.id;
-  ui.tab = 'ficha';
-  render();
-  toast('Caso creado en la base de datos');
-  const f = $('[data-f="nombre"]');
-  if(f) f.focus();
+function nuevoCaso(){
+  let n=state.casos.length+1;
+  while(state.casos.some(c=>c.codigo==='C-'+String(n).padStart(3,'0')))n++;
+  const c={id:uid(),codigo:'C-'+String(n).padStart(3,'0'),nombre:'',pais:'',idiomas_lista:[],nacimiento:'',llegada:'',contacto:'',situacion:'otra',tramite:'ninguno',vivienda:'',empleo:'',familia:'',vul:[],notas:'',estado:'abierto',creado:hoy(),actualizado:new Date().toISOString(),seg:[],docs:[],der:[]};
+  state.casos.push(c);guardar();
+  ui.view='casos';ui.caseId=c.id;ui.tab='ficha';render();
+  const f=$('[data-f="nombre"]');if(f)f.focus();
 }
 
 function accion(a,el){
   const c=ui.caseId?getCaso(ui.caseId):null;
   switch(a){
-  case 'guardar-caso': tocar(c);toast('Caso guardado correctamente');break;
     case 'nav':ui.view=el.dataset.v;ui.caseId=null;render();$('#main').focus({preventScroll:true});break;
     case 'ir-casos':ui.f=el.dataset.f||ui.f;ui.q='';ui.view='casos';ui.caseId=null;render();break;
     case 'ir-plazos':ui.view='plazos';ui.caseId=null;render();break;
     case 'nuevo':nuevoCaso();break;
     case 'abrir':ui.view='casos';ui.caseId=el.dataset.id;ui.tab=el.dataset.tab||'ficha';render();break;
     case 'volver':ui.caseId=null;render();break;
-    case 'filtro':ui.f=el.dataset.v;render(true);break;
+    case 'filtro':
+      if(el.dataset.v==='archivados' && !ui.archivadosDesbloqueados){
+        ui.f='archivados';
+      } else {
+        ui.f=el.dataset.v;
+      }
+      render(true);
+      break;
     case 'tab':ui.tab=el.dataset.t;render(true);break;
-    case 'estado':c.estado=c.estado==='abierto'?'cerrado':'abierto';c.cierre=c.estado==='cerrado'?hoy():'';tocar(c);render(true);toast(c.estado==='cerrado'?'Caso cerrado':'Caso reabierto');break;
-    case 'borrar-caso':confirmar('Eliminar caso','Se borrarán también su seguimiento, documentos, plazos y derivaciones. Esta acción no se puede deshacer.','Eliminar caso',()=>{
+    
+    // Ciclo de estado: Abierto -> Cerrado -> Archivado
+    case 'estado':
+      if(c.estado==='abierto') c.estado='cerrado';
+      else if(c.estado==='cerrado') c.estado='archivado';
+      else c.estado='abierto';
+      c.cierre=c.estado!=='abierto'?hoy():'';
+      tocar(c);render(true);toast('Estado actualizado a: '+c.estado);
+      break;
+
+    case 'desbloquear-archivados':
+      const passInput = $('#pass-archivados');
+      if(passInput && passInput.value === 'admin123'){ // Contraseña protegida de ejemplo
+        ui.archivadosDesbloqueados = true;
+        render(true);
+        toast('Sección de archivados desbloqueada');
+      } else {
+        toast('Contraseña incorrecta');
+        if(passInput) passInput.focus();
+      }
+      break;
+
+    case 'borrar-caso':confirmar('Eliminar caso','Se borrarán también su seguimiento, documentos y plazos. Esta acción no se puede deshacer.','Eliminar caso',()=>{
       state.casos=state.casos.filter(x=>x.id!==c.id);state.plazos=state.plazos.filter(p=>p.caso!==c.id);guardar();ui.caseId=null;render();toast('Caso eliminado');});break;
-    case 'resumen':{
-      modal('<h2 id="m-t">Informe social (borrador)</h2><p class="nota">Puedes editar el texto antes de copiarlo.</p><textarea id="informe-txt">'+esc(informe(c))+'</textarea><div class="acciones"><button class="btn primario" data-a="informe-copiar">Copiar texto</button><button class="btn" data-a="modal-cerrar">Cerrar</button></div>');break;}
-    case 'informe-copiar':copiar($('#informe-txt').value,$('#informe-txt'));break;
+    
+    case 'resumen':
+      generarPDFInforme(c);
+      break;
+      
     case 'modal-cerrar':cerrarModal();break;
-    case 'velo':if(el===document.activeElement||true){/* se gestiona en el clic */}break;
+    case 'velo':if(el===document.activeElement||true){/* clic */}break;
     case 'confirmar-ok':{const f=pendiente;cerrarModal();if(f)f();break;}
+
+    case 'idioma-add': {
+      const input = $('#nuevo-idioma-input');
+      const select = $('#nuevo-nivel-select');
+      const val = input.value.trim();
+      if(!val) { input.focus(); return; }
+      
+      if(!Array.isArray(c.idiomas_lista)) c.idiomas_lista = [];
+      c.idiomas_lista.push({ idioma: val, nivel: select.value });
+      
+      tocar(c);
+      render(true);
+      toast('Idioma añadido');
+      break;
+    }
+    case 'idioma-del': {
+      const idx = parseInt(el.dataset.idx, 10);
+      c.idiomas_lista.splice(idx, 1);
+      tocar(c);
+      render(true);
+      toast('Idioma eliminado');
+      break;
+    }
+    case 'guardar-caso':
+      tocar(c);
+      toast('¡Caso guardado correctamente!');
+      break;
 
     case 'seg-add':{
       const f=$('#seg-fecha').value,t=$('#seg-texto').value.trim();
@@ -744,44 +689,36 @@ function accion(a,el){
 
     case 'plz-calc':{
       const f=calcPlazo($('#plz-tipo').value,$('#plz-notif').value);
-      if(!f){msg('#plz-msg',PLZ[$('#plz-tipo').value].regla?'Indica la fecha de notificación.':'Este tipo de plazo no tiene cálculo automático: introduce la fecha límite a mano.');return;}
-      $('#plz-fecha').value=f;msg('#plz-msg','Fecha límite calculada ('+PLZ[$('#plz-tipo').value].regla+'): '+fmtLargo(f)+'. No se descuentan festivos.');break;}
+      if(!f){msg('#plz-msg',PLZ[$('#plz-tipo').value].regla?'Indica la fecha de notificación.':'Introduce la fecha límite a mano.');return;}
+      $('#plz-fecha').value=f;msg('#plz-msg','Fecha límite calculada: '+fmtLargo(f)+'.');break;}
     case 'plz-add':{
       const tipo=$('#plz-tipo').value,notif=$('#plz-notif').value;
       let f=$('#plz-fecha').value;
       if(!f&&notif)f=calcPlazo(tipo,notif)||'';
-      if(!f){msg('#plz-msg',PLZ[tipo].regla?'Indica la fecha de notificación o la fecha límite.':'Indica la fecha límite.');(PLZ[tipo].regla?$('#plz-notif'):$('#plz-fecha')).focus();return;}
-      state.plazos.push({id:uid(),caso:c.id,tipo:tipo,fecha:f,notif:notif,nota:$('#plz-nota').value.trim(),hecho:false});tocar(c);render(true);toast('Plazo añadido: '+habTxt(f));break;}
+      if(!f){msg('#plz-msg','Indica la fecha.');return;}
+      state.plazos.push({id:uid(),caso:c.id,tipo:tipo,fecha:f,notif:notif,nota:$('#plz-nota').value.trim(),hecho:false});tocar(c);render(true);toast('Plazo añadido');break;}
     case 'plz-hecho':{const p=state.plazos.find(x=>x.id===el.dataset.id);if(p){p.hecho=!p.hecho;guardar();render(true);}break;}
-    case 'plz-del':confirmar('Eliminar plazo','Se quitará este plazo de la lista.','Eliminar',()=>{state.plazos=state.plazos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Plazo eliminado');});break;
+    case 'plz-del':confirmar('Eliminar plazo','Se quitará este plazo.','Eliminar',()=>{state.plazos=state.plazos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Plazo eliminado');});break;
     case 'calc-global':{
       const tipo=$('#calc-tipo').value,f=calcPlazo(tipo,$('#calc-fecha').value);
-      $('#calc-res').innerHTML=f?'<strong>Fecha límite: '+esc(fmtLargo(f))+'</strong> ('+esc(PLZ[tipo].regla)+' desde la notificación).':'Indica la fecha de notificación.';break;}
+      $('#calc-res').innerHTML=f?'<strong>Fecha límite: '+esc(fmtLargo(f))+'</strong>':'Indica la fecha de notificación.';break;}
 
     case 'der-add':{
       const r=$('#der-rec').value.trim();
-      if(!r){msg('#der-msg','Indica el recurso o la entidad.');$('#der-rec').focus();return;}
+      if(!r){msg('#der-msg','Indica el recurso.');$('#der-rec').focus();return;}
       c.der.push({id:uid(),recurso:r,fecha:$('#der-fecha').value||hoy(),motivo:$('#der-motivo').value.trim(),estado:'Pendiente'});tocar(c);render(true);toast('Derivación añadida');break;}
-    case 'der-del':confirmar('Eliminar derivación','Se quitará esta derivación del caso.','Eliminar',()=>{c.der=c.der.filter(x=>x.id!==el.dataset.id);tocar(c);render(true);toast('Derivación eliminada');});break;
+    case 'der-del':confirmar('Eliminar derivación','Se quitará esta derivación.','Eliminar',()=>{c.der=c.der.filter(x=>x.id!==el.dataset.id);tocar(c);render(true);toast('Derivación eliminada');});break;
 
     case 'rec-add':{
       const n=$('#rec-nombre').value.trim();
-      if(!n){msg('#rec-msg','Indica el nombre del recurso.');$('#rec-nombre').focus();return;}
+      if(!n){msg('#rec-msg','Indica el nombre.');$('#rec-nombre').focus();return;}
       state.recursos.push({id:uid(),nombre:n,tipo:$('#rec-tipo').value.trim(),contacto:'',notas:''});guardar();render(true);toast('Recurso añadido');break;}
-    case 'rec-del':confirmar('Eliminar recurso','Se quitará este recurso del directorio.','Eliminar',()=>{state.recursos=state.recursos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Recurso eliminado');});break;
+    case 'rec-del':confirmar('Eliminar recurso','Se quitará del directorio.','Eliminar',()=>{state.recursos=state.recursos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Recurso eliminado');});break;
 
-    case 'periodo':{
-      const y=new Date().getFullYear(),v=el.dataset.v;
-      if(v==='anio'){ui.desde=y+'-01-01';ui.hasta=hoy();}
-      else if(v==='anterior'){ui.desde=(y-1)+'-01-01';ui.hasta=(y-1)+'-12-31';}
-      else{const d=new Date();d.setMonth(d.getMonth()-3);ui.desde=iso(d);ui.hasta=hoy();}
-      render(true);break;}
-    case 'mem-copiar':
-      modal('<h2 id="m-t">Texto para la memoria</h2><p class="nota">Puedes editarlo antes de copiarlo.</p><textarea id="informe-txt">'+esc(textoMemoria())+'</textarea><div class="acciones"><button class="btn primario" data-a="informe-copiar">Copiar texto</button><button class="btn" data-a="modal-cerrar">Cerrar</button></div>');break;
-      
     case 'logout':
       supabase.auth.signOut().then(() => {
         ui.loggedIn = false;
+        ui.archivadosDesbloqueados = false;
         render();
         toast('Sesión cerrada');
       });
@@ -789,7 +726,7 @@ function accion(a,el){
   }
 }
 
-// --- 2. LÓGICA DE LOGIN CON SUPABASE ---
+// --- 2. LOGIN REAL ---
 const loginForm = document.getElementById('login-form');
 if(loginForm) {
   loginForm.addEventListener('submit', async e => {
@@ -825,98 +762,33 @@ document.addEventListener('click',e=>{
   if(!el)return;
   accion(el.dataset.a,el);
 });
+
 document.addEventListener('change',e=>{
   const t=e.target;
-  if(t.dataset.m){if(t.value)ui[t.dataset.m]=t.value;render(true);const n=document.querySelector('[data-m="'+t.dataset.m+'"]');if(n)n.focus();return;}
   if(ui.view==='casos'&&ui.caseId){
     const c=getCaso(ui.caseId);if(!c)return;
     if(t.dataset.f){c[t.dataset.f]=t.value;tocar(c);actualizarCabecera(c);return;}
     if(t.dataset.vul){c.vul=c.vul.filter(x=>x!==t.dataset.vul);if(t.checked)c.vul.push(t.dataset.vul);tocar(c);return;}
-    if(t.dataset.doc){const d=c.docs.find(x=>x.id===t.dataset.doc);if(d){d.ok=t.checked;tocar(c);actualizarCabecera(c);const p=progresoDocs(c);$('#docs-txt').innerHTML='<strong>'+p.txt+'</strong>';$('#docs-barra').style.width=p.pct+'%';
-      const tab=document.querySelector('.tabs button[data-t="docs"]');if(tab)tab.innerHTML='Documentos <span class="ins">'+c.docs.filter(x=>x.ok).length+'/'+c.docs.length+'</span>';}return;}
+    if(t.dataset.doc){const d=c.docs.find(x=>x.id===t.dataset.doc);if(d){d.ok=t.checked;tocar(c);actualizarCabecera(c);const p=progresoDocs(c);$('#docs-txt').innerHTML='<strong>'+p.txt+'</strong>';$('#docs-barra').style.width=p.pct+'%';}return;}
     if(t.dataset.der){const d=c.der.find(x=>x.id===t.dataset.der);if(d){d.estado=t.value;tocar(c);}return;}
   }
-  if(t.dataset.r){const r=state.recursos.find(x=>x.id===t.dataset.rid);if(r){r[t.dataset.r]=t.value;guardar();
-    if(t.dataset.r==='nombre'||t.dataset.r==='tipo'){const s=t.closest('details').querySelector('summary');s.innerHTML='<span>'+esc(r.nombre)+'</span><span class="nota">'+esc(r.tipo)+'</span>';}}}
+  if(t.dataset.r){const r=state.recursos.find(x=>x.id===t.dataset.rid);if(r){r[t.dataset.r]=t.value;guardar();}}
 });
+
 document.addEventListener('input',e=>{
   if(e.target.id==='q'){ui.q=e.target.value;$('#lista-casos').innerHTML=listaCasos();}
-  if(e.target.id==='der-rec'){const r=state.recursos.find(x=>x.nombre.toLowerCase()===e.target.value.trim().toLowerCase());const i=$('#der-info');if(i)i.textContent=r&&r.contacto?r.contacto:'Elige uno de tus recursos o escribe otro.';}
 });
+
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('#modal-root').firstChild){cerrarModal();return;}
-  if(e.key==='Enter'&&e.target.id==='doc-nuevo'){e.preventDefault();accion('doc-add',e.target);}
-  if(e.key==='Enter'&&e.target.id==='rec-nombre'){e.preventDefault();accion('rec-add',e.target);}
+  if(e.key==='Enter'&&e.target.id==='nuevo-idioma-input'){e.preventDefault();accion('idioma-add',e.target);}
 });
 
-// --- 3. COMPROBAR SESIÓN ACTIVA ---
-// --- CARGAR DATOS REALES DE SUPABASE ---
-async function cargarDatosSupabase() {
-  // 1. Cargar casos
-  const { data: casosData, error: errCasos } = await supabase.from('casos').select('*');
-  if (errCasos) {
-    console.error('Error cargando casos:', errCasos);
-    return;
-  }
-
-  // 2. Cargar plazos
-  const { data: plazosData, error: errPlazos } = await supabase.from('plazos').select('*');
-  
-  // 3. Cargar recursos
-  const { data: recursosData, error: errRecursos } = await supabase.from('recursos').select('*');
-
-  // Mapeamos los datos de Supabase a la estructura que usa tu interfaz
-  state.casos = (casosData || []).map(c => ({
-    id: c.id,
-    codigo: c.codigo,
-    nombre: c.nombre,
-    pais: c.pais,
-    idiomas: c.idiomas,
-    nacimiento: c.nacimiento,
-    llegada: c.llegada,
-    genero: c.genero,
-    contacto: c.contacto,
-    situacion: c.situacion,
-    tramite: c.tramite,
-    vivienda: c.vivienda,
-    empleo: c.empleo,
-    familia: c.familia,
-    vul: c.vul || [],
-    notas: c.notas,
-    estado: c.estado,
-    creado: c.creado_en ? c.creado_en.split('T')[0] : hoy(),
-    actualizado: c.actualizado_en || new Date().toISOString(),
-    seg: [], // Los cargaremos o vincularemos en detalle más adelante
-    docs: [],
-    der: []
-  }));
-
-  state.plazos = (plazosData || []).map(p => ({
-    id: p.id,
-    caso: p.caso_id,
-    tipo: p.tipo,
-    fecha: p.fecha,
-    notif: p.notif,
-    nota: p.nota,
-    hecho: p.hecho
-  }));
-
-  if (recursosData && recursosData.length > 0) {
-    state.recursos = recursosData.map(r => ({
-      id: r.id,
-      nombre: r.nombre,
-      tipo: r.tipo,
-      contacto: r.contacto,
-      notas: r.notas
-    }));
-  }
-}
-
+// --- 3. ARRANQUE ---
 async function arrancarApp() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     ui.loggedIn = true;
-    await cargarDatosSupabase(); // Sincronizamos con Supabase
   }
   render();
 }
