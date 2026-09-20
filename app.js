@@ -1,11 +1,10 @@
 (function(){
 'use strict';
 
-// --- INICIALIZAR SUPABASE ---
+// --- 1. INICIALIZAR SUPABASE ---
 const supabaseUrl = 'https://fvowpkbezdiyhxuflqbp.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2b3dwa2JlemRpeWh4dWZscWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MjU0NjYsImV4cCI6MjEwNTUwMTQ2Nn0.m5x8WpOASKkJVDeC5yO8xPCkwLkQ6_cKrc-IGmZSD0A';
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-// -----------------------------
 
 /* ---------- Datos de referencia ---------- */
 const SIT={
@@ -127,7 +126,7 @@ const fmtLargo=s=>s?parse(s).toLocaleDateString('es-ES',{weekday:'long',day:'num
 const opts=(list,sel)=>list.map(o=>`<option value="${esc(o[0])}"${o[0]===sel?' selected':''}>${esc(o[1])}</option>`).join('');
 const plural=(n,a,b)=>n===1?a:b;
 
-/* ---------- Almacenamiento Temporal (Se cambiará por Supabase) ---------- */
+/* ---------- Almacenamiento (Temporal hasta migrar a base de datos pura) ---------- */
 const KEY='cuaderno-migratorio-v1';
 function semillas(){
   return [
@@ -259,6 +258,7 @@ function vInicio(){
   const urg=venc+prox;
   const tile=(num,lab,cls,acc,attr)=>'<button class="tile '+cls+'" data-a="'+acc+'" '+attr+'><span class="num">'+num+'</span><span class="lab">'+lab+'</span></button>';
   const bloque=(t,acc,cuerpo)=>'<section class="bloque"><div class="bloque-cab"><h2>'+t+'</h2>'+(acc||'')+'</div>'+cuerpo+'</section>';
+  
   let h='<section class="hero"><p class="fecha">'+esc(cap(fmtLargo(hoy())))+'</p><h1>'+saludo()+'</h1>';
   if(state.casos.length){
     const partes=[];
@@ -267,7 +267,9 @@ function vInicio(){
     if(frios.length)partes.push(frios.length+' '+plural(frios.length,'caso sin contacto','casos sin contacto')+' desde hace 30 días o más');
     h+='<p class="resumen">Tienes '+abiertos.length+' '+plural(abiertos.length,'caso abierto','casos abiertos')+'. '+(partes.length?'Requieren atención: '+partes.join(', ')+'.':'No hay plazos urgentes ni casos desatendidos.')+'</p>';
   }else h+='<p class="resumen">Tu cuaderno de casos, plazos y documentos en un solo sitio.</p>';
+  
   h+='<button class="btn primario solo-esc" data-a="nuevo">+ Nuevo caso</button></section>';
+  
   if(!state.casos.length){
     h+='<section class="tarjeta"><h2>Empieza en tres pasos</h2><ol class="pasos">'
       +'<li><strong>Crea un caso</strong><span>Registra a la persona con un alias o un código.</span></li>'
@@ -315,6 +317,7 @@ function listaCasos(){
     return '<li><button class="fila" data-a="abrir" data-id="'+c.id+'">'+avatar(c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(c))+(c.estado==='cerrado'?' (cerrado)':'')+'</span><span class="meta">'+esc(c.pais||'País sin indicar')+', '+esc((TRAM[c.tramite]||TRAM.ninguno).t)+'</span></span><span class="der"><span class="tag '+s.c+'">'+esc(s.s)+'</span>'+(d?'<span class="tag '+d.c+'">'+esc(d.t)+'</span>':(frio?'<span class="tag ambar">Sin contacto '+diasSinContacto(c)+' d</span>':''))+'</span></button></li>';
   }).join('')+'</ul></div>';
 }
+
 function vCasos(){
   const f=(k,t)=>'<button class="chip" data-a="filtro" data-v="'+k+'" aria-pressed="'+(ui.f===k)+'">'+t+'</button>';
   return '<div class="cabecera"><div><h1>Casos</h1><p class="sub">'+state.casos.length+' '+plural(state.casos.length,'caso registrado','casos registrados')+'</p></div><button class="btn primario solo-esc" data-a="nuevo">+ Nuevo caso</button></div>'
@@ -331,6 +334,7 @@ function chipsCaso(c){
   if(c.idiomas)x.push(c.idiomas);
   return x.length?x.map(t=>'<span class="dato">'+esc(t)+'</span>').join(''):'<span class="nota">Completa la ficha para ver aquí los datos clave.</span>';
 }
+
 function indCaso(c){
   const p=progresoDocs(c);
   const ps=state.plazos.filter(x=>x.caso===c.id&&!x.hecho).sort((a,b)=>a.fecha.localeCompare(b.fecha));
@@ -339,6 +343,7 @@ function indCaso(c){
     +'<div><span class="k">Próximo plazo</span><span class="v">'+(ps.length?esc(fmt(ps[0].fecha)):'Ninguno')+'</span>'+(ps.length?'<span class="k">'+esc(habTxt(ps[0].fecha))+'</span>':'')+'</div>'
     +'<div><span class="k">Último contacto</span><span class="v">'+(uc?hace(diff(uc,hoy())):'Sin registrar')+'</span></div>';
 }
+
 function vCaso(c){
   const pend=state.plazos.filter(p=>p.caso===c.id&&!p.hecho).length;
   const dok=c.docs.filter(d=>d.ok).length;
@@ -411,6 +416,7 @@ function filaPlazo(p,conCaso){
   +(p.hecho?'<span class="tag verde">Hecho</span>':'<span class="tag '+d.c+'">'+esc(d.t)+'</span>')
   +'<div><button class="btn chico" data-a="plz-hecho" data-id="'+p.id+'">'+(p.hecho?'Reabrir':'Marcar como hecho')+'</button> <button class="btn texto chico" data-a="plz-del" data-id="'+p.id+'">Eliminar</button></div></li>';
 }
+
 function tPlz(c){
   const lista=state.plazos.filter(p=>p.caso===c.id).sort((a,b)=>(a.hecho-b.hecho)||a.fecha.localeCompare(b.fecha));
   return '<section class="tarjeta"><h3>Nuevo plazo</h3><p class="nota">Para subsanaciones y recursos basta con la fecha de notificación: la fecha límite se calcula sola.</p><div class="grid dos"><label class="campo"><span>Tipo de plazo</span><select id="plz-tipo">'+opts(Object.keys(PLZ).map(k=>[k,PLZ[k].t]),'subsanacion')+'</select></label>'
@@ -536,6 +542,7 @@ function vMemoria(){
   +'</div>';
   return h;
 }
+
 function textoMemoria(){
   const e=estadisticas(),n=e.at.length;
   const li=(t,rows,tot)=>t+': '+(rows.length?rows.map(r=>r[0]+' '+r[1]+' ('+pct(r[1],tot)+'%)').join('; '):'sin datos');
@@ -578,14 +585,14 @@ function informe(c){
   return L.join('\n');
 }
 
-/* ---------- Render ---------- */
+/* ---------- Render principal ---------- */
 function render(conservar){
   if(ui.caseId&&!getCaso(ui.caseId))ui.caseId=null;
   
   const root = $('#app-root');
   const login = $('#login-screen');
   
-  // Lógica de visualización de Login vs App
+  // Control de visibilidad Login vs App Principal
   if (!ui.loggedIn) {
     if (login) login.hidden = false;
     if (root) root.hidden = true;
@@ -601,7 +608,7 @@ function render(conservar){
   else if(ui.view==='plazos')h=vPlazos();
   else if(ui.view==='memoria')h=vMemoria();
   else if(ui.view==='recursos')h=vRecursos();
-  else h=vInicio(); // Ya no existe la vista copias
+  else h=vInicio();
 
   $('#main').innerHTML=h;
   const vv=ui.view==='plazos'?'inicio':ui.view;
@@ -611,7 +618,7 @@ function render(conservar){
 }
 const msg=(sel,t)=>{const e=$(sel);if(e)e.textContent=t;};
 
-/* ---------- Acciones ---------- */
+/* ---------- Acciones y Eventos ---------- */
 function actualizarCabecera(c){
   const n=$('#h-nombre'),sb=$('#h-sub'),st=$('#h-sello'),av=$('#h-avatar'),ch=$('#h-chips'),ind=$('#h-ind');
   if(n)n.textContent=nombreCaso(c);
@@ -621,6 +628,7 @@ function actualizarCabecera(c){
   if(ch)ch.innerHTML=chipsCaso(c);
   if(ind)ind.innerHTML=indCaso(c);
 }
+
 function nuevoCaso(){
   let n=state.casos.length+1;
   while(state.casos.some(c=>c.codigo==='C-'+String(n).padStart(3,'0')))n++;
@@ -704,22 +712,41 @@ function accion(a,el){
       modal('<h2 id="m-t">Texto para la memoria</h2><p class="nota">Puedes editarlo antes de copiarlo.</p><textarea id="informe-txt">'+esc(textoMemoria())+'</textarea><div class="acciones"><button class="btn primario" data-a="informe-copiar">Copiar texto</button><button class="btn" data-a="modal-cerrar">Cerrar</button></div>');break;
       
     case 'logout':
-      ui.loggedIn = false;
-      render();
-      toast('Sesión cerrada');
+      supabase.auth.signOut().then(() => {
+        ui.loggedIn = false;
+        render();
+        toast('Sesión cerrada');
+      });
       break;
   }
 }
 
-// Simulador temporal de Login
+// --- 2. LÓGICA DE LOGIN CON SUPABASE ---
 const loginForm = document.getElementById('login-form');
 if(loginForm) {
-  loginForm.addEventListener('submit', e => {
+  loginForm.addEventListener('submit', async e => {
     e.preventDefault();
-    // Aquí pondremos más adelante el código de Supabase
-    ui.loggedIn = true;
-    render();
-    toast('Bienvenido');
+    const email = document.getElementById('login-email').value;
+    const pass = document.getElementById('login-pass').value;
+    const msg = $('#login-msg');
+    
+    msg.textContent = 'Iniciando sesión...';
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: pass
+    });
+
+    if (error) {
+      msg.textContent = 'Usuario o contraseña incorrectos.';
+    } else {
+      msg.textContent = '';
+      ui.loggedIn = true;
+      $('#login-email').value = '';
+      $('#login-pass').value = '';
+      render();
+      toast('Bienvenido');
+    }
   });
 }
 
@@ -754,5 +781,15 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='rec-nombre'){e.preventDefault();accion('rec-add',e.target);}
 });
 
-render();
+// --- 3. COMPROBAR SESIÓN ACTIVA ---
+async function arrancarApp() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    ui.loggedIn = true;
+  }
+  render();
+}
+
+arrancarApp();
+
 })();
