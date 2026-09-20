@@ -11,22 +11,46 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
-  <nav class="nav" aria-label="Secciones">
-    <div class="marca"><span class="logo">CM</span><span>Cuaderno migratorio<small>Seguimiento de casos</small></span></div>
-    <button data-a="nav" data-v="inicio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Inicio</span></button>
-    <button data-a="nav" data-v="casos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Casos</span></button>
-    <button data-a="nav" data-v="recursos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Recursos</span></button>
-    <button data-a="nav" data-v="memoria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Memoria</span></button>
-    <button data-a="nav" data-v="copias"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Copias</span></button>
-  </nav>
-  <main id="main" tabindex="-1"></main>
-</div>
-<button id="fab" class="btn primario fab" data-a="nuevo" hidden>+ Nuevo caso</button>
-<div id="modal-root"></div>
-<div id="toast" role="status" aria-live="polite"></div>
+  <!-- Pantalla de Login -->
+  <div id="login-screen" class="login-wrapper">
+    <div class="login-box">
+      <div class="login-logo">CM</div>
+      <h1>Cuaderno migratorio</h1>
+      <p class="sub">Acceso restringido a personal autorizado</p>
+      
+      <form id="login-form" class="grid">
+        <label class="campo">
+          <span>Correo electrónico</span>
+          <input type="email" id="login-email" required placeholder="usuario@entidad.org">
+        </label>
+        <label class="campo">
+          <span>Contraseña</span>
+          <input type="password" id="login-pass" required>
+        </label>
+        <button type="submit" class="btn primario" style="margin-top:.5rem">Iniciar sesión</button>
+      </form>
+      <p id="login-msg" class="nota rojo" style="text-align:center; min-height: 20px;"></p>
+    </div>
+  </div>
 
-<!-- Enlace a tu archivo JS -->
-<script src="app.js"></script>
+  <!-- Aplicación principal (Oculta por defecto) -->
+  <div class="app" id="app-root" hidden>
+    <nav class="nav" aria-label="Secciones">
+      <div class="marca"><span class="logo">CM</span><span>Cuaderno migratorio<small>Seguimiento de casos</small></span></div>
+      <button data-a="nav" data-v="inicio"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Inicio</span></button>
+      <button data-a="nav" data-v="casos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Casos</span></button>
+      <button data-a="nav" data-v="recursos"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Recursos</span></button>
+      <button data-a="nav" data-v="memoria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Memoria</span></button>
+      <!-- Hemos quitado el botón de "Copias" porque ya no hará falta con la base de datos -->
+      <button data-a="logout" style="margin-top:auto"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Salir</span></button>
+    </nav>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  
+  <button id="fab" class="btn primario fab" data-a="nuevo" hidden>+ Nuevo caso</button>
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
 </body>
 </html>
