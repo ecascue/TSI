@@ -694,6 +694,7 @@ async function nuevoCaso() {
 function accion(a,el){
   const c=ui.caseId?getCaso(ui.caseId):null;
   switch(a){
+  case 'guardar-caso': tocar(c);toast('Caso guardado correctamente');break;
     case 'nav':ui.view=el.dataset.v;ui.caseId=null;render();$('#main').focus({preventScroll:true});break;
     case 'ir-casos':ui.f=el.dataset.f||ui.f;ui.q='';ui.view='casos';ui.caseId=null;render();break;
     case 'ir-plazos':ui.view='plazos';ui.caseId=null;render();break;
