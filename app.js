@@ -629,13 +629,66 @@ function actualizarCabecera(c){
   if(ind)ind.innerHTML=indCaso(c);
 }
 
-function nuevoCaso(){
-  let n=state.casos.length+1;
-  while(state.casos.some(c=>c.codigo==='C-'+String(n).padStart(3,'0')))n++;
-  const c={id:uid(),codigo:'C-'+String(n).padStart(3,'0'),nombre:'',pais:'',idiomas:'',nacimiento:'',llegada:'',contacto:'',situacion:'otra',tramite:'ninguno',vivienda:'',empleo:'',familia:'',vul:[],notas:'',estado:'abierto',creado:hoy(),actualizado:new Date().toISOString(),seg:[],docs:[],der:[]};
-  state.casos.push(c);guardar();
-  ui.view='casos';ui.caseId=c.id;ui.tab='ficha';render();
-  const f=$('[data-f="nombre"]');if(f)f.focus();
+async function nuevoCaso() {
+  let n = state.casos.length + 1;
+  while(state.casos.some(c => c.codigo === 'C-' + String(n).padStart(3, '0'))) n++;
+  
+  const nuevoCodigo = 'C-' + String(n).padStart(3, '0');
+  
+  // Objeto para insertar en Supabase
+  const casoParaBD = {
+    codigo: nuevoCodigo,
+    nombre: '',
+    pais: '',
+    idiomas: '',
+    situacion: 'otra',
+    tramite: 'ninguno',
+    estado: 'abierto',
+    vul: [],
+    notas: ''
+  };
+
+  const { data, error } = await supabase.from('casos').insert([casoParaBD]).select().single();
+
+  if (error) {
+    toast('Error al crear el caso en la base de datos');
+    console.error(error);
+    return;
+  }
+
+  // Estructura local adaptada al ID real generado por Supabase
+  const c = {
+    id: data.id,
+    codigo: data.codigo,
+    nombre: data.nombre || '',
+    pais: data.pais || '',
+    idiomas: data.idiomas || '',
+    nacimiento: '',
+    llegada: '',
+    contacto: '',
+    situacion: data.situacion || 'otra',
+    tramite: data.tramite || 'ninguno',
+    vivienda: '',
+    empleo: '',
+    familia: '',
+    vul: data.vul || [],
+    notas: data.notas || '',
+    estado: data.estado || 'abierto',
+    creado: hoy(),
+    actualizado: new Date().toISOString(),
+    seg: [],
+    docs: [],
+    der: []
+  };
+
+  state.casos.push(c);
+  ui.view = 'casos';
+  ui.caseId = c.id;
+  ui.tab = 'ficha';
+  render();
+  toast('Caso creado en la base de datos');
+  const f = $('[data-f="nombre"]');
+  if(f) f.focus();
 }
 
 function accion(a,el){
@@ -782,10 +835,73 @@ document.addEventListener('keydown',e=>{
 });
 
 // --- 3. COMPROBAR SESIÓN ACTIVA ---
+// --- CARGAR DATOS REALES DE SUPABASE ---
+async function cargarDatosSupabase() {
+  // 1. Cargar casos
+  const { data: casosData, error: errCasos } = await supabase.from('casos').select('*');
+  if (errCasos) {
+    console.error('Error cargando casos:', errCasos);
+    return;
+  }
+
+  // 2. Cargar plazos
+  const { data: plazosData, error: errPlazos } = await supabase.from('plazos').select('*');
+  
+  // 3. Cargar recursos
+  const { data: recursosData, error: errRecursos } = await supabase.from('recursos').select('*');
+
+  // Mapeamos los datos de Supabase a la estructura que usa tu interfaz
+  state.casos = (casosData || []).map(c => ({
+    id: c.id,
+    codigo: c.codigo,
+    nombre: c.nombre,
+    pais: c.pais,
+    idiomas: c.idiomas,
+    nacimiento: c.nacimiento,
+    llegada: c.llegada,
+    genero: c.genero,
+    contacto: c.contacto,
+    situacion: c.situacion,
+    tramite: c.tramite,
+    vivienda: c.vivienda,
+    empleo: c.empleo,
+    familia: c.familia,
+    vul: c.vul || [],
+    notas: c.notas,
+    estado: c.estado,
+    creado: c.creado_en ? c.creado_en.split('T')[0] : hoy(),
+    actualizado: c.actualizado_en || new Date().toISOString(),
+    seg: [], // Los cargaremos o vincularemos en detalle más adelante
+    docs: [],
+    der: []
+  }));
+
+  state.plazos = (plazosData || []).map(p => ({
+    id: p.id,
+    caso: p.caso_id,
+    tipo: p.tipo,
+    fecha: p.fecha,
+    notif: p.notif,
+    nota: p.nota,
+    hecho: p.hecho
+  }));
+
+  if (recursosData && recursosData.length > 0) {
+    state.recursos = recursosData.map(r => ({
+      id: r.id,
+      nombre: r.nombre,
+      tipo: r.tipo,
+      contacto: r.contacto,
+      notas: r.notas
+    }));
+  }
+}
+
 async function arrancarApp() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     ui.loggedIn = true;
+    await cargarDatosSupabase(); // Sincronizamos con Supabase
   }
   render();
 }
