@@ -954,9 +954,17 @@ function accion(a,el){
             msg.textContent = 'Error al subir: ' + error.message;
             return;
           }
-          const { data: urlData } = supabase.storage
+          const { data: urlData, error: urlError } = await supabase.storage
             .from('documentos-casos')
-            .getPublicUrl(filePath);
+            .createSignedUrl(filePath, 60 * 60 * 24 * 365); // Válido 1 año
+
+          c.docs.push({
+            id: uid(),
+            t: nombreDoc,
+            ok: true,
+            url: urlData ? urlData.signedUrl : '',
+            path: filePath
+          });
 
           c.docs.push({
             id: uid(),
