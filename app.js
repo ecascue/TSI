@@ -126,8 +126,6 @@ const fmtLargo=s=>s?parse(s).toLocaleDateString('es-ES',{weekday:'long',day:'num
 const opts=(list,sel)=>list.map(o=>`<option value="${esc(o[0])}"${o[0]===sel?' selected':''}>${esc(o[1])}</option>`).join('');
 const plural=(n,a,b)=>n===1?a:b;
 
-/* ---------- Almacenamiento Local Temporal ---------- */
-const KEY='cuaderno-migratorio-v1';
 function semillas(){
   return [
     ['Oficina de Extranjería','Administración'],
@@ -139,39 +137,120 @@ function semillas(){
     ['Entidad de acogida o atención humanitaria','Tercer sector']
   ].map(r=>({id:uid(),nombre:r[0],tipo:r[1],contacto:'',notas:'Añade teléfono, dirección y horario.'}));
 }
-function vacio(){return {v:1,casos:[],plazos:[],recursos:semillas()};}
-function normalizar(s){
-  const b=Object.assign(vacio(),s||{});
+
+/* ---------- Sincronización con Supabase ---------- */
+let state = { v: 1, casos: [], plazos: [], recursos:semillas() };
+
+async function cargarDatosSupabase() {
+  const { data: casosData, error: errCasos } = await supabase.from('casos').select('*');
+  if (errCasos) {
+    console.error('Error cargando casos:', errCasos);
+    return;
+  }
+
+  const { data: plazosData } = await supabase.from('plazos').select('*');
+  const { data: recursosData } = await supabase.from('recursos').select('*');
+
   const hoyStr = hoy();
-  
-  b.casos=(b.casos||[]).map(c => {
-    // Si el caso está cerrado y tiene fecha de cierre registrada...
-    if(c.estado === 'cerrado' && c.cierre) {
-      const diasPasados = diff(c.cierre, hoyStr);
-      // Si han pasado 15 días o más, se archiva automáticamente
-      if(diasPasados >= 15) {
-        c.estado = 'archivado';
+
+  state.casos = (casosData || []).map(c => {
+    let estadoActual = c.estado || 'abierto';
+    if(estadoActual === 'cerrado' && c.cierre) {
+      if(diff(c.cierre, hoyStr) >= 15) {
+        estadoActual = 'archivado';
       }
     }
-    return Object.assign({seg:[],docs:[],der:[],vul:[],idiomas_lista:[],estado:'abierto',situacion:'otra',tramite:'ninguno',creado:hoy(),actualizado:new Date().toISOString()}, c);
+    return {
+      id: c.id,
+      codigo: c.codigo || '',
+      nombre: c.nombre || '',
+      pais: c.pais || '',
+      idiomas_lista: c.idiomas_lista || [],
+      nacimiento: c.nacimiento || '',
+      llegada: c.llegada || '',
+      genero: c.genero || '',
+      contacto: c.contacto || '',
+      situacion: c.situacion || 'otra',
+      tramite: c.tramite || 'ninguno',
+      vivienda: c.vivienda || '',
+      empleo: c.empleo || '',
+      familia: c.familia || '',
+      vul: c.vul || [],
+      notas: c.notas || '',
+      estado: estadoActual,
+      cierre: c.cierre || '',
+      creado: c.creado_en ? c.creado_en.split('T')[0] : hoy(),
+      actualizado: c.actualizado_en || new Date().toISOString(),
+      seg: c.seg || [],
+      docs: c.docs || [],
+      der: c.der || []
+    };
   });
 
-  b.plazos=b.plazos||[];
-  b.recursos=b.recursos||[];
-  return b;
+  state.plazos = (plazosData || []).map(p => ({
+    id: p.id,
+    caso: p.caso_id,
+    tipo: p.tipo,
+    fecha: p.fecha,
+    notif: p.notif,
+    nota: p.nota,
+    hecho: p.hecho
+  }));
+
+  if (recursosData && recursosData.length > 0) {
+    state.recursos = recursosData.map(r => ({
+      id: r.id,
+      nombre: r.nombre,
+      tipo: r.tipo,
+      contacto: r.contacto,
+      notas: r.notas
+    }));
+  }
 }
-function cargar(){
-  try{const raw=localStorage.getItem(KEY);if(raw)return normalizar(JSON.parse(raw));}catch(e){}
-  return normalizar(null);
+
+async function tocar(c) {
+  if (!c) return;
+  c.actualizado = new Date().toISOString();
+  
+  const { error } = await supabase
+    .from('casos')
+    .update({
+      codigo: c.codigo,
+      nombre: c.nombre,
+      pais: c.pais,
+      idiomas_lista: c.idiomas_lista,
+      nacimiento: c.nacimiento || null,
+      llegada: c.llegada || null,
+      genero: c.genero,
+      contacto: c.contacto,
+      situacion: c.situacion,
+      tramite: c.tramite,
+      vivienda: c.vivienda,
+      empleo: c.empleo,
+      familia: c.familia,
+      vul: c.vul,
+      notas: c.notas,
+      estado: c.estado,
+      cierre: c.cierre || null,
+      seg: c.seg,
+      docs: c.docs,
+      der: c.der,
+      actualizado_en: c.actualizado
+    })
+    .eq('id', c.id);
+
+  if (error) {
+    console.error('Error al sincronizar con Supabase:', error);
+    toast('Error al guardar en la nube');
+  }
 }
-let state=cargar();
-function guardar(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+
+function guardar() {}
 
 /* ---------- Estado de Interfaz y Archivados ---------- */
 const ui={loggedIn:false, view:'inicio',caseId:null,tab:'ficha',q:'',f:'abiertos',desde:hoy().slice(0,4)+'-01-01',hasta:hoy(), archivadosDesbloqueados:false};
 const getCaso=id=>state.casos.find(c=>c.id===id);
 const nombreCaso=c=>c.nombre||c.codigo||'Caso sin nombre';
-function tocar(c){if(c)c.actualizado=new Date().toISOString();guardar();}
 function ultimoContacto(c){const f=c.seg.map(x=>x.fecha).sort().pop();return f||null;}
 function diasSinContacto(c){return diff(ultimoContacto(c)||c.creado,hoy());}
 function plazosPend(){return state.plazos.filter(p=>!p.hecho&&getCaso(p.caso)).sort((a,b)=>a.fecha.localeCompare(b.fecha));}
@@ -321,14 +400,13 @@ function listaCasos(){
     if(q)cs=cs.filter(c=>[c.nombre,c.codigo,c.pais,c.contacto].join(' ').toLowerCase().includes(q));
     if(!cs.length)return '<div class="vacio">No hay casos archivados.</div>';
     return '<div class="tarjeta plana"><ul class="lista">'+cs.map(c=>{
-      const s=SIT[c.situacion]||SIT.otra;
       return '<li><button class="fila" data-a="abrir" data-id="'+c.id+'">'+avatar(c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(c))+' (Archivado)</span><span class="meta">'+esc(c.pais||'País sin indicar')+'</span></span><span class="der"><span class="tag rojo">Archivado</span></span></button></li>';
     }).join('')+'</ul></div>';
   }
 
   let cs=state.casos.filter(c=>ui.f==='cerrados'?c.estado==='cerrado':c.estado==='abierto');
   if(ui.f==='sincontacto')cs=cs.filter(c=>diasSinContacto(c)>=30);
-  if(q)cs=cs.filter(c=>[c.nombre,c.codigo,c.pais,c.idiomas,c.contacto].join(' ').toLowerCase().includes(q));
+  if(q)cs=cs.filter(c=>[c.nombre,c.codigo,c.pais,c.idiomas_lista,c.contacto].join(' ').toLowerCase().includes(q));
   cs.sort((a,b)=>b.actualizado.localeCompare(a.actualizado));
   if(!cs.length)return '<div class="vacio">'+(state.casos.length?'Ningún caso coincide con la búsqueda o el filtro.':'Aún no hay casos. Usa «Nuevo caso» para empezar.')+'</div>';
   const planes=plazosPend();
@@ -436,7 +514,6 @@ function tFicha(c){
   
   +g('Observaciones','','<label class="campo"><span class="nota">Cualquier dato útil que no encaje en otro campo</span><textarea rows="4" data-f="notas">'+esc(c.notas||'')+'</textarea></label>')
   
-  // Botones fijos al pie del formulario
   +'<div class="acciones" style="background:var(--hoja); padding:1rem; border:1px solid var(--linea); border-radius:var(--r); margin-top:2rem; display:flex; justify-content:space-between; align-items:center;">'
     +'<button class="btn primario" data-a="guardar-caso">Guardar cambios del caso</button>'
     +'<button class="btn peligro" data-a="borrar-caso">Eliminar caso</button>'
@@ -460,15 +537,12 @@ function tDocs(c){
   const p=progresoDocs(c);
   return '<section class="tarjeta"><p id="docs-txt"><strong>'+p.txt+'</strong></p><div class="barra" aria-hidden="true"><i id="docs-barra" style="width:'+p.pct+'%"></i></div>'
   +(c.docs.length?'<ul class="lista" style="margin:0 -1rem -1rem;border-top:1px solid var(--linea)">'+c.docs.map(d=>'<li class="doc"><label><input type="checkbox" data-doc="'+d.id+'"'+(d.ok?' checked':'')+'><span style="flex:1;">'+esc(d.t)+(d.url?' <a href="'+d.url+'" target="_blank" class="btn texto chico" style="margin-left:.5rem">Ver archivo 📎</a>':'')+'</span></label><button class="btn texto chico peligro" data-a="doc-del" data-id="'+d.id+'">Quitar</button></li>').join('')+'</ul>':'<div class="vacio">La lista está vacía. Sube documentos reales o carga listas orientativas.</div>')+'</section>'
-  
-  // SECCIÓN PARA SUBIR ARCHIVOS REALES
   +'<section class="tarjeta"><h3>Subir documento real (PDF o imagen)</h3><div class="grid dos">'
     +'<label class="campo"><span>Nombre o descripción del documento</span><input id="doc-nombre-archivo" type="text" placeholder="Ej. Contrato de trabajo firmado"></label>'
     +'<label class="campo"><span>Seleccionar archivo</span><input id="doc-file-input" type="file" accept=".pdf,image/*" style="padding:.35rem;"></label>'
   +'</div>'
   +'<div class="acciones"><button class="btn primario" data-a="doc-upload">Subir y adjuntar archivo</button></div><p id="doc-subida-msg" class="nota"></p></section>'
-
-  +'<section class="tarjeta"><h3>Cargar lista orientativa de requisitos</h3><div class="fila-add"><select id="doc-tram" aria-label="Trámite">'+opts(Object.keys(TRAM).filter(k=>TRAM[k].items.length).map(k=>[k,TRAM[k].t]),TRAM[c.tramite]&&TRAM[c.tramite].items.length?c.tramite:'arraigo_social')+'</select><button class="btn" data-a="doc-load">Cargar lista</button></div>'
+  +'<section class="tarjeta"><h3>Cargar lista orientativa</h3><div class="fila-add"><select id="doc-tram" aria-label="Trámite">'+opts(Object.keys(TRAM).filter(k=>TRAM[k].items.length).map(k=>[k,TRAM[k].t]),TRAM[c.tramite]&&TRAM[c.tramite].items.length?c.tramite:'arraigo_social')+'</select><button class="btn" data-a="doc-load">Cargar lista</button></div>'
   +'<div class="aviso">Las listas son orientativas. Los archivos reales que subas se almacenarán de forma segura vinculados a este expediente.</div></section>';
 }
 
@@ -524,6 +598,97 @@ function vRecursos(){
     +'<label class="campo full"><span>Contacto</span><textarea rows="2" data-r="contacto" data-rid="'+r.id+'">'+esc(r.contacto)+'</textarea></label>'
     +'<label class="campo full"><span>Notas</span><textarea rows="2" data-r="notas" data-rid="'+r.id+'">'+esc(r.notas)+'</textarea></label></div>'
     +'<div class="acciones"><button class="btn peligro chico" data-a="rec-del" data-id="'+r.id+'">Eliminar</button></div></div></details>').join('')+'</div>':'<div class="vacio" style="margin-top:1rem">No hay recursos. Añade los servicios con los que trabajas habitualmente.</div>');
+}
+
+/* ---------- Memoria y Estadísticas ---------- */
+const EDAD_ORD=['Menores de 18','18 a 29','30 a 44','45 a 64','65 o más','Sin dato'];
+function edadTramo(c,h){
+  if(!c.nacimiento)return 'Sin dato';
+  const n=parse(c.nacimiento),f=parse(h);
+  let a=f.getFullYear()-n.getFullYear();
+  if(f.getMonth()<n.getMonth()||(f.getMonth()===n.getMonth()&&f.getDate()<n.getDate()))a--;
+  if(a<0)return 'Sin dato';
+  return a<18?EDAD_ORD[0]:a<30?EDAD_ORD[1]:a<45?EDAD_ORD[2]:a<65?EDAD_ORD[3]:EDAD_ORD[4];
+}
+function contar(arr,fn){
+  const m={},d={};
+  arr.forEach(x=>{
+    let ks=fn(x);if(!Array.isArray(ks))ks=[ks];
+    ks.forEach(k=>{
+      if(k==null||k==='')return;
+      const kk=String(k).trim().replace(/\s+/g,' '),l=kk.toLowerCase();
+      if(!(l in d))d[l]=kk;
+      m[l]=(m[l]||0)+1;
+    });
+  });
+  return Object.keys(m).map(l=>[d[l],m[l]]).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'es'));
+}
+function estadisticas(){
+  let d=ui.desde,h=ui.hasta;
+  if(d>h){const t=d;d=h;h=t;}
+  const en=f=>!!f&&f>=d&&f<=h;
+  const at=state.casos.filter(c=>c.seg.some(s=>en(s.fecha)));
+  const ints=[],ders=[];
+  state.casos.forEach(c=>{
+    c.seg.forEach(s=>{if(en(s.fecha))ints.push(s);});
+    c.der.forEach(x=>{if(en(x.fecha))ders.push(x);});
+  });
+  const gen={};GENS.forEach(g=>{if(g[0])gen[g[0]]=g[1]==='Mujer'?'Mujeres':g[1]==='Hombre'?'Hombres':g[1];});
+  return {
+    d:d,h:h,at:at,ints:ints,ders:ders,
+    altas:state.casos.filter(c=>en(c.creado)).length,
+    cierres:state.casos.filter(c=>en(c.cierre)).length,
+    genero:contar(at,c=>gen[c.genero]||'Sin dato'),
+    edad:contar(at,c=>edadTramo(c,h)).sort((a,b)=>EDAD_ORD.indexOf(a[0])-EDAD_ORD.indexOf(b[0])),
+    pais:contar(at,c=>c.pais||'Sin dato'),
+    sit:contar(at,c=>(SIT[c.situacion]||SIT.otra).t),
+    tram:contar(at,c=>(TRAM[c.tramite]||TRAM.ninguno).t),
+    vul:contar(at,c=>c.vul.map(k=>(VUL.find(v=>v[0]===k)||[0,k])[1])),
+    tipos:contar(ints,s=>s.tipo),
+    dest:contar(ders,x=>x.estado)
+  };
+}
+const pct=(v,t)=>t?Math.round(v/t*100):0;
+function barras(rows,total){
+  if(!rows.length)return '<p class="nota">Sin datos en este periodo.</p>';
+  return '<ul class="barras">'+rows.map(r=>'<li><span class="et">'+esc(r[0])+'</span><span class="bb" aria-hidden="true"><i style="width:'+pct(r[1],total)+'%"></i></span><span class="nu">'+r[1]+' ('+pct(r[1],total)+'%)</span></li>').join('')+'</ul>';
+}
+function vMemoria(){
+  const e=estadisticas(),n=e.at.length;
+  const chip=(k,t)=>'<button class="chip" data-a="periodo" data-v="'+k+'" aria-pressed="false">'+t+'</button>';
+  let h='<div class="cabecera"><div><h1>Memoria</h1><p class="sub">Datos agregados para memorias e informes de actividad</p></div></div>'
+  +'<section class="tarjeta"><div class="grid dos"><label class="campo"><span>Desde</span><input type="date" data-m="desde" value="'+esc(ui.desde)+'"></label><label class="campo"><span>Hasta</span><input type="date" data-m="hasta" value="'+esc(ui.hasta)+'"></label></div>'
+  +'<div class="chips" role="group" aria-label="Periodos rápidos" style="margin-bottom:0">'+chip('anio','Este año')+chip('anterior','Año anterior')+chip('trim','Últimos 3 meses')+'</div></section>';
+  if(!e.ints.length&&!e.altas&&!e.cierres&&!e.ders.length){
+    return h+'<div class="vacio" style="margin-top:1rem">No hay actividad registrada entre '+esc(fmt(e.d))+' y '+esc(fmt(e.h))+'. Los datos salen del seguimiento, las derivaciones y las fichas de cada caso.</div>';
+  }
+  const kpi=(num,lab)=>'<div class="tile neutro"><span class="num">'+num+'</span><span class="lab">'+lab+'</span></div>';
+  const bl=(t,c)=>'<section class="tarjeta"><h3>'+t+'</h3>'+c+'</section>';
+  h+='<div class="tiles cuatro" style="margin-top:1rem">'+kpi(n,'Personas atendidas')+kpi(e.ints.length,'Intervenciones')+kpi(e.ders.length,'Derivaciones')+kpi(e.altas+' / '+e.cierres,'Casos abiertos / cerrados')+'</div>'
+  +'<div class="acciones" style="margin-top:0"><button class="btn primario" data-a="mem-copiar">Copiar texto para la memoria</button></div>'
+  +'<p class="nota">Personas atendidas: casos con al menos una intervención en el periodo. Los porcentajes se calculan sobre ese total.</p>'
+  +'<div class="memgrid">'
+  +bl('Por género',barras(e.genero,n))
+  +bl('Por edad',barras(e.edad,n))
+  +bl('Por país de origen',barras(e.pais.slice(0,10),n)+(e.pais.length>10?'<p class="nota">Se muestran los 10 países más frecuentes.</p>':''))
+  +bl('Por situación administrativa',barras(e.sit,n))
+  +bl('Por trámite en curso',barras(e.tram,n))
+  +bl('Factores de vulnerabilidad',barras(e.vul,n))
+  +bl('Intervenciones por tipo',barras(e.tipos,e.ints.length))
+  +bl('Derivaciones por estado',barras(e.dest,e.ders.length))
+  +'</div>';
+  return h;
+}
+
+function textoMemoria(){
+  const e=estadisticas(),n=e.at.length;
+  const li=(t,rows,tot)=>t+': '+(rows.length?rows.map(r=>r[0]+' '+r[1]+' ('+pct(r[1],tot)+'%)').join('; '):'sin datos');
+  return ['DATOS DE ACTIVIDAD','Periodo: '+fmt(e.d)+' a '+fmt(e.h),'',
+    'Personas atendidas: '+n,'Casos abiertos en el periodo: '+e.altas,'Casos cerrados en el periodo: '+e.cierres,
+    'Intervenciones realizadas: '+e.ints.length,'Derivaciones realizadas: '+e.ders.length,'',
+    li('Género',e.genero,n),li('Edad',e.edad,n),li('País de origen',e.pais.slice(0,10),n),
+    li('Situación administrativa',e.sit,n),li('Trámite en curso',e.tram,n),li('Factores de vulnerabilidad',e.vul,n),'',
+    li('Intervenciones por tipo',e.tipos,e.ints.length),li('Derivaciones por estado',e.dest,e.ders.length)].join('\n');
 }
 
 /* ---------- Generación de PDF Automática ---------- */
@@ -594,7 +759,7 @@ function render(conservar){
   if(ui.view==='inicio')h=vInicio();
   else if(ui.view==='casos')h=ui.caseId?vCaso(getCaso(ui.caseId)):vCasos();
   else if(ui.view==='plazos')h=vPlazos();
-  else if(ui.view==='memoria')h='<div class="cabecera"><h1>Memoria</h1></div><p class="nota">Módulo en optimización.</p>';
+  else if(ui.view==='memoria')h=vMemoria();
   else if(ui.view==='recursos')h=vRecursos();
   else h=vInicio();
 
@@ -606,69 +771,68 @@ function render(conservar){
 }
 const msg=(sel,t)=>{const e=$(sel);if(e)e.textContent=t;};
 
-function nuevoCaso(){
+async function nuevoCaso(){
   let n=state.casos.length+1;
   while(state.casos.some(c=>c.codigo==='C-'+String(n).padStart(3,'0')))n++;
-  const c={id:uid(),codigo:'C-'+String(n).padStart(3,'0'),nombre:'',pais:'',idiomas_lista:[],nacimiento:'',llegada:'',contacto:'',situacion:'otra',tramite:'ninguno',vivienda:'',empleo:'',familia:'',vul:[],notas:'',estado:'abierto',creado:hoy(),actualizado:new Date().toISOString(),seg:[],docs:[],der:[]};
-  state.casos.push(c);guardar();
+  
+  const nuevoCodigo = 'C-'+String(n).padStart(3,'0');
+  const casoParaBD = {
+    codigo: nuevoCodigo,
+    nombre: '',
+    pais: '',
+    idiomas_lista: [],
+    situacion: 'otra',
+    tramite: 'ninguno',
+    estado: 'abierto',
+    vul: [],
+    notas: '',
+    seg: [],
+    docs: [],
+    der: []
+  };
+
+  const { data, error } = await supabase.from('casos').insert([casoParaBD]).select().single();
+
+  if (error) {
+    toast('Error al crear el caso en la base de datos');
+    console.error(error);
+    return;
+  }
+
+  const c = {
+    id: data.id,
+    codigo: data.codigo,
+    nombre: data.nombre || '',
+    pais: data.pais || '',
+    idiomas_lista: data.idiomas_lista || [],
+    nacimiento: '',
+    llegada: '',
+    contacto: '',
+    situacion: data.situacion || 'otra',
+    tramite: data.tramite || 'ninguno',
+    vivienda: '',
+    empleo: '',
+    familia: '',
+    vul: data.vul || [],
+    notas: data.notas || '',
+    estado: data.estado || 'abierto',
+    cierre: '',
+    creado: hoy(),
+    actualizado: new Date().toISOString(),
+    seg: data.seg || [],
+    docs: data.docs || [],
+    der: data.der || []
+  };
+
+  state.casos.push(c);
   ui.view='casos';ui.caseId=c.id;ui.tab='ficha';render();
+  toast('Caso creado en la base de datos');
   const f=$('[data-f="nombre"]');if(f)f.focus();
 }
 
 function accion(a,el){
   const c=ui.caseId?getCaso(ui.caseId):null;
   switch(a){
-    case 'doc-upload': {
-      const nombreInput = $('#doc-nombre-archivo');
-      const fileInput = $('#doc-file-input');
-      const msg = $('#doc-subida-msg');
-      
-      const nombreDoc = nombreInput.value.trim();
-      const file = fileInput.files[0];
-
-      if(!file) {
-        msg.textContent = 'Por favor, selecciona un archivo.';
-        return;
-      }
-      if(!nombreDoc) {
-        msg.textContent = 'Indica un nombre o descripción para el documento.';
-        nombreInput.focus();
-        return;
-      }
-
-      msg.textContent = 'Subiendo archivo a Supabase...';
-
-      // Creamos una ruta única para el archivo dentro del bucket
-      const filePath = c.id + '/' + Date.now() + '_' + file.name;
-
-      supabase.storage
-        .from('documentos-casos')
-        .upload(filePath, file)
-        .then(async ({ data, error }) => {
-          if (error) {
-            msg.textContent = 'Error al subir el archivo: ' + error.message;
-            return;
-          }
-
-          // Obtenemos la URL pública o firmada para poder descargarlo/verlo
-          const { data: urlData } = supabase.storage
-            .from('documentos-casos')
-            .getPublicUrl(filePath);
-
-          c.docs.push({
-            id: uid(),
-            t: nombreDoc,
-            ok: true, // Se marca como aportado directamente al subirlo
-            url: urlData.publicUrl,
-            path: filePath
-          });
-
-          tocar(c);
-          render(true);
-          toast('¡Documento real subido con éxito!');
-        });
-      break;
-    }
     case 'nav':ui.view=el.dataset.v;ui.caseId=null;render();$('#main').focus({preventScroll:true});break;
     case 'ir-casos':ui.f=el.dataset.f||ui.f;ui.q='';ui.view='casos';ui.caseId=null;render();break;
     case 'ir-plazos':ui.view='plazos';ui.caseId=null;render();break;
@@ -685,11 +849,10 @@ function accion(a,el){
       break;
     case 'tab':ui.tab=el.dataset.t;render(true);break;
     
-    // Ciclo de estado: Abierto -> Cerrado -> Archivado
-   case 'estado':
+    case 'estado':
       if(c.estado==='abierto') {
         c.estado='cerrado';
-        c.cierre=hoy(); // Guardamos el día exacto en que se cerró
+        c.cierre=hoy();
       }
       else if(c.estado==='cerrado') {
         c.estado='archivado';
@@ -698,14 +861,12 @@ function accion(a,el){
         c.estado='abierto';
         c.cierre='';
       }
-      tocar(c);
-      render(true);
-      toast('Estado actualizado a: '+c.estado);
+      tocar(c);render(true);toast('Estado actualizado a: '+c.estado);
       break;
 
     case 'desbloquear-archivados':
       const passInput = $('#pass-archivados');
-      if(passInput && passInput.value === 'admin123'){ // Contraseña protegida de ejemplo
+      if(passInput && passInput.value === 'admin123'){
         ui.archivadosDesbloqueados = true;
         render(true);
         toast('Sección de archivados desbloqueada');
@@ -715,8 +876,11 @@ function accion(a,el){
       }
       break;
 
-    case 'borrar-caso':confirmar('Eliminar caso','Se borrarán también su seguimiento, documentos y plazos. Esta acción no se puede deshacer.','Eliminar caso',()=>{
-      state.casos=state.casos.filter(x=>x.id!==c.id);state.plazos=state.plazos.filter(p=>p.caso!==c.id);guardar();ui.caseId=null;render();toast('Caso eliminado');});break;
+    case 'borrar-caso':confirmar('Eliminar caso','Se borrarán también su seguimiento, documentos y plazos. Esta acción no se puede deshacer.','Eliminar caso', async ()=>{
+      await supabase.from('casos').delete().eq('id', c.id);
+      state.casos=state.casos.filter(x=>x.id!==c.id);
+      state.plazos=state.plazos.filter(p=>p.caso!==c.id);
+      ui.caseId=null;render();toast('Caso eliminado');});break;
     
     case 'resumen':
       generarPDFInforme(c);
@@ -750,7 +914,7 @@ function accion(a,el){
     }
     case 'guardar-caso':
       tocar(c);
-      toast('¡Caso guardado correctamente!');
+      toast('¡Caso guardado correctamente en la nube!');
       break;
 
     case 'seg-add':{
@@ -768,6 +932,47 @@ function accion(a,el){
       items.forEach(t=>{if(!c.docs.some(d=>d.t===t)){c.docs.push({id:uid(),t:t,ok:false});n++;}});
       tocar(c);render(true);toast(n?n+' '+plural(n,'documento añadido','documentos añadidos'):'Esa lista ya estaba cargada');break;}
 
+    case 'doc-upload': {
+      const nombreInput = $('#doc-nombre-archivo');
+      const fileInput = $('#doc-file-input');
+      const msg = $('#doc-subida-msg');
+      
+      const nombreDoc = nombreInput.value.trim();
+      const file = fileInput.files[0];
+
+      if(!file) { msg.textContent = 'Por favor, selecciona un archivo.'; return; }
+      if(!nombreDoc) { msg.textContent = 'Indica un nombre o descripción.'; nombreInput.focus(); return; }
+
+      msg.textContent = 'Subiendo archivo a Supabase...';
+      const filePath = c.id + '/' + Date.now() + '_' + file.name;
+
+      supabase.storage
+        .from('documentos-casos')
+        .upload(filePath, file)
+        .then(async ({ data, error }) => {
+          if (error) {
+            msg.textContent = 'Error al subir: ' + error.message;
+            return;
+          }
+          const { data: urlData } = supabase.storage
+            .from('documentos-casos')
+            .getPublicUrl(filePath);
+
+          c.docs.push({
+            id: uid(),
+            t: nombreDoc,
+            ok: true,
+            url: urlData.publicUrl,
+            path: filePath
+          });
+
+          tocar(c);
+          render(true);
+          toast('¡Documento real subido con éxito!');
+        });
+      break;
+    }
+
     case 'plz-calc':{
       const f=calcPlazo($('#plz-tipo').value,$('#plz-notif').value);
       if(!f){msg('#plz-msg',PLZ[$('#plz-tipo').value].regla?'Indica la fecha de notificación.':'Introduce la fecha límite a mano.');return;}
@@ -777,9 +982,33 @@ function accion(a,el){
       let f=$('#plz-fecha').value;
       if(!f&&notif)f=calcPlazo(tipo,notif)||'';
       if(!f){msg('#plz-msg','Indica la fecha.');return;}
-      state.plazos.push({id:uid(),caso:c.id,tipo:tipo,fecha:f,notif:notif,nota:$('#plz-nota').value.trim(),hecho:false});tocar(c);render(true);toast('Plazo añadido');break;}
-    case 'plz-hecho':{const p=state.plazos.find(x=>x.id===el.dataset.id);if(p){p.hecho=!p.hecho;guardar();render(true);}break;}
-    case 'plz-del':confirmar('Eliminar plazo','Se quitará este plazo.','Eliminar',()=>{state.plazos=state.plazos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Plazo eliminado');});break;
+      
+      const nuevoPlazo = {id:uid(),caso:c.id,tipo:tipo,fecha:f,notif:notif,nota:$('#plz-nota').value.trim(),hecho:false};
+      state.plazos.push(nuevoPlazo);
+      
+      supabase.from('plazos').insert([{
+        id: nuevoPlazo.id,
+        caso_id: c.id,
+        tipo: tipo,
+        fecha: f,
+        notif: notif,
+        nota: nuevoPlazo.nota,
+        hecho: false
+      }]).then(() => {});
+
+      tocar(c);render(true);toast('Plazo añadido');break;}
+    case 'plz-hecho':{
+      const p=state.plazos.find(x=>x.id===el.dataset.id);
+      if(p){
+        p.hecho=!p.hecho;
+        supabase.from('plazos').update({hecho: p.hecho}).eq('id', p.id).then(()=>{});
+        render(true);
+      }
+      break;}
+    case 'plz-del':confirmar('Eliminar plazo','Se quitará este plazo.','Eliminar', async ()=>{
+      await supabase.from('plazos').delete().eq('id', el.dataset.id);
+      state.plazos=state.plazos.filter(x=>x.id!==el.dataset.id);
+      render(true);toast('Plazo eliminado');});break;
     case 'calc-global':{
       const tipo=$('#calc-tipo').value,f=calcPlazo(tipo,$('#calc-fecha').value);
       $('#calc-res').innerHTML=f?'<strong>Fecha límite: '+esc(fmtLargo(f))+'</strong>':'Indica la fecha de notificación.';break;}
@@ -793,8 +1022,25 @@ function accion(a,el){
     case 'rec-add':{
       const n=$('#rec-nombre').value.trim();
       if(!n){msg('#rec-msg','Indica el nombre.');$('#rec-nombre').focus();return;}
-      state.recursos.push({id:uid(),nombre:n,tipo:$('#rec-tipo').value.trim(),contacto:'',notas:''});guardar();render(true);toast('Recurso añadido');break;}
-    case 'rec-del':confirmar('Eliminar recurso','Se quitará del directorio.','Eliminar',()=>{state.recursos=state.recursos.filter(x=>x.id!==el.dataset.id);guardar();render(true);toast('Recurso eliminado');});break;
+      const nuevoRec = {id:uid(),nombre:n,tipo:$('#rec-tipo').value.trim(),contacto:'',notas:''};
+      state.recursos.push(nuevoRec);
+      supabase.from('recursos').insert([nuevoRec]).then(()=>{});
+      render(true);toast('Recurso añadido');break;}
+    case 'rec-del':confirmar('Eliminar recurso','Se quitará del directorio.','Eliminar', async ()=>{
+      await supabase.from('recursos').delete().eq('id', el.dataset.id);
+      state.recursos=state.recursos.filter(x=>x.id!==el.dataset.id);
+      render(true);toast('Recurso eliminado');});break;
+
+    case 'periodo':{
+      const y=new Date().getFullYear(),v=el.dataset.v;
+      if(v==='anio'){ui.desde=y+'-01-01';ui.hasta=hoy();}
+      else if(v==='anterior'){ui.desde=(y-1)+'-01-01';ui.hasta=(y-1)+'-12-31';}
+      else{const d=new Date();d.setMonth(d.getMonth()-3);ui.desde=iso(d);ui.hasta=hoy();}
+      render(true);
+      break;}
+    case 'mem-copiar':
+      modal('<h2 id="m-t">Texto para la memoria</h2><p class="nota">Puedes editarlo antes de copiarlo.</p><textarea id="informe-txt">'+esc(textoMemoria())+'</textarea><div class="acciones"><button class="btn primario" data-a="informe-copiar">Copiar texto</button><button class="btn" data-a="modal-cerrar">Cerrar</button></div>');
+      break;
 
     case 'logout':
       supabase.auth.signOut().then(() => {
@@ -830,6 +1076,7 @@ if(loginForm) {
       ui.loggedIn = true;
       $('#login-email').value = '';
       $('#login-pass').value = '';
+      await cargarDatosSupabase();
       render();
       toast('Bienvenido');
     }
@@ -846,6 +1093,7 @@ document.addEventListener('click',e=>{
 
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(t.dataset.m){if(t.value)ui[t.dataset.m]=t.value;render(true);return;}
   if(ui.view==='casos'&&ui.caseId){
     const c=getCaso(ui.caseId);if(!c)return;
     if(t.dataset.f){c[t.dataset.f]=t.value;tocar(c);actualizarCabecera(c);return;}
@@ -853,7 +1101,7 @@ document.addEventListener('change',e=>{
     if(t.dataset.doc){const d=c.docs.find(x=>x.id===t.dataset.doc);if(d){d.ok=t.checked;tocar(c);actualizarCabecera(c);const p=progresoDocs(c);$('#docs-txt').innerHTML='<strong>'+p.txt+'</strong>';$('#docs-barra').style.width=p.pct+'%';}return;}
     if(t.dataset.der){const d=c.der.find(x=>x.id===t.dataset.der);if(d){d.estado=t.value;tocar(c);}return;}
   }
-  if(t.dataset.r){const r=state.recursos.find(x=>x.id===t.dataset.rid);if(r){r[t.dataset.r]=t.value;guardar();}}
+  if(t.dataset.r){const r=state.recursos.find(x=>x.id===t.dataset.rid);if(r){r[t.dataset.r]=t.value;}}
 });
 
 document.addEventListener('input',e=>{
@@ -870,6 +1118,7 @@ async function arrancarApp() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     ui.loggedIn = true;
+    await cargarDatosSupabase();
   }
   render();
 }
