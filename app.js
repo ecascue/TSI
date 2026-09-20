@@ -121,10 +121,8 @@ const fmtLargo=s=>s?parse(s).toLocaleDateString('es-ES',{weekday:'long',day:'num
 const opts=(list,sel)=>list.map(o=>`<option value="${esc(o[0])}"${o[0]===sel?' selected':''}>${esc(o[1])}</option>`).join('');
 const plural=(n,a,b)=>n===1?a:b;
 
-/* ---------- Almacenamiento ---------- */
+/* ---------- Almacenamiento Temporal (Se cambiará por Supabase) ---------- */
 const KEY='cuaderno-migratorio-v1';
-let almacenamiento=true;
-try{localStorage.setItem('_t','1');localStorage.removeItem('_t');}catch(e){almacenamiento=false;}
 function semillas(){
   return [
     ['Oficina de Extranjería','Administración'],
@@ -148,10 +146,10 @@ function cargar(){
   return normalizar(null);
 }
 let state=cargar();
-function guardar(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){almacenamiento=false;}}
+function guardar(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
 
 /* ---------- Estado de interfaz ---------- */
-const ui={view:'inicio',caseId:null,tab:'ficha',q:'',f:'abiertos',desde:hoy().slice(0,4)+'-01-01',hasta:hoy()};
+const ui={loggedIn:false, view:'inicio',caseId:null,tab:'ficha',q:'',f:'abiertos',desde:hoy().slice(0,4)+'-01-01',hasta:hoy()};
 const getCaso=id=>state.casos.find(c=>c.id===id);
 const nombreCaso=c=>c.nombre||c.codigo||'Caso sin nombre';
 function tocar(c){if(c)c.actualizado=new Date().toISOString();guardar();}
@@ -264,7 +262,6 @@ function vInicio(){
     h+='<p class="resumen">Tienes '+abiertos.length+' '+plural(abiertos.length,'caso abierto','casos abiertos')+'. '+(partes.length?'Requieren atención: '+partes.join(', ')+'.':'No hay plazos urgentes ni casos desatendidos.')+'</p>';
   }else h+='<p class="resumen">Tu cuaderno de casos, plazos y documentos en un solo sitio.</p>';
   h+='<button class="btn primario solo-esc" data-a="nuevo">+ Nuevo caso</button></section>';
-  if(!almacenamiento)h+='<div class="aviso">Este navegador no permite guardar datos. Usa la sección Copias para conservar tu trabajo.</div>';
   if(!state.casos.length){
     h+='<section class="tarjeta"><h2>Empieza en tres pasos</h2><ol class="pasos">'
       +'<li><strong>Crea un caso</strong><span>Registra a la persona con un alias o un código.</span></li>'
@@ -293,8 +290,6 @@ function vInicio(){
       h+=bloque('Últimas intervenciones','','<div class="tarjeta plana"><ul class="lista">'+ult.slice(0,5).map(x=>'<li><button class="fila" data-a="abrir" data-id="'+x.c.id+'" data-tab="seg">'+avatar(x.c)+'<span class="cuerpo"><span class="nombre">'+esc(nombreCaso(x.c))+'</span><span class="meta">'+esc(x.s.tipo)+': '+esc(x.s.texto)+'</span></span><span class="der"><span class="meta">'+esc(fmt(x.s.fecha))+'</span></span></button></li>').join('')+'</ul></div>');
     }
   }
-  h+='<div class="urg"><span class="urg-t">Urgencias</span><a class="pilula" href="tel:112"><strong>112</strong> Emergencias</a><a class="pilula" href="tel:016"><strong>016</strong> Violencia de género</a></div>'
-    +'<p class="nota">Los datos se guardan solo en este navegador y no se envían a ningún servidor. Registra lo estrictamente necesario y haz copias periódicas en la sección Copias.</p>';
   return h;
 }
 
@@ -456,16 +451,6 @@ function vRecursos(){
     +'<div class="acciones"><button class="btn peligro chico" data-a="rec-del" data-id="'+r.id+'">Eliminar</button></div></div></details>').join('')+'</div>':'<div class="vacio" style="margin-top:1rem">No hay recursos. Añade los servicios con los que trabajas habitualmente.</div>');
 }
 
-function vCopias(){
-  return '<div class="cabecera"><div><h1>Copias</h1><p class="sub">Tus datos viven solo en este navegador</p></div></div>'
-  +'<div class="aviso">Si borras los datos del navegador o cambias de dispositivo, se pierden. Genera una copia y guárdala en un lugar seguro. Contiene datos personales: trátala según el RGPD y las normas de tu entidad.</div>'
-  +'<section class="tarjeta"><h3>Guardar una copia</h3><div class="acciones" style="margin-top:0"><button class="btn primario" data-a="copia-gen">Generar copia</button><button class="btn" data-a="copia-copiar">Copiar texto</button></div>'
-  +'<label class="campo" style="margin-top:.8rem"><span>Texto de la copia</span><textarea id="copia-txt" rows="5" readonly></textarea></label></section>'
-  +'<section class="tarjeta"><h3>Restaurar una copia</h3><label class="campo"><span>Pega aquí el texto de una copia anterior</span><textarea id="copia-in" rows="5"></textarea></label>'
-  +'<div class="acciones"><button class="btn" data-a="copia-restaurar">Restaurar copia</button></div><p id="copia-msg" class="nota" role="alert"></p></section>'
-  +'<section class="tarjeta"><h3>Borrar todo</h3><p>Elimina todos los casos, plazos y recursos de este navegador.</p><div class="acciones"><button class="btn peligro" data-a="borrar-todo">Borrar todos los datos</button></div></section>';
-}
-
 /* ---------- Memoria (estadísticas) ---------- */
 const EDAD_ORD=['Menores de 18','18 a 29','30 a 44','45 a 64','65 o más','Sin dato'];
 function edadTramo(c,h){
@@ -590,13 +575,28 @@ function informe(c){
 /* ---------- Render ---------- */
 function render(conservar){
   if(ui.caseId&&!getCaso(ui.caseId))ui.caseId=null;
+  
+  const root = $('#app-root');
+  const login = $('#login-screen');
+  
+  // Lógica de visualización de Login vs App
+  if (!ui.loggedIn) {
+    if (login) login.hidden = false;
+    if (root) root.hidden = true;
+    return;
+  } else {
+    if (login) login.hidden = true;
+    if (root) root.hidden = false;
+  }
+
   let h;
   if(ui.view==='inicio')h=vInicio();
   else if(ui.view==='casos')h=ui.caseId?vCaso(getCaso(ui.caseId)):vCasos();
   else if(ui.view==='plazos')h=vPlazos();
   else if(ui.view==='memoria')h=vMemoria();
   else if(ui.view==='recursos')h=vRecursos();
-  else h=vCopias();
+  else h=vInicio(); // Ya no existe la vista copias
+
   $('#main').innerHTML=h;
   const vv=ui.view==='plazos'?'inicio':ui.view;
   document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.v===vv)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
@@ -696,18 +696,25 @@ function accion(a,el){
       render(true);break;}
     case 'mem-copiar':
       modal('<h2 id="m-t">Texto para la memoria</h2><p class="nota">Puedes editarlo antes de copiarlo.</p><textarea id="informe-txt">'+esc(textoMemoria())+'</textarea><div class="acciones"><button class="btn primario" data-a="informe-copiar">Copiar texto</button><button class="btn" data-a="modal-cerrar">Cerrar</button></div>');break;
-
-    case 'copia-gen':$('#copia-txt').value=JSON.stringify(state);toast('Copia generada. Cópiala y guárdala.');break;
-    case 'copia-copiar':{
-      const ta=$('#copia-txt');if(!ta.value)ta.value=JSON.stringify(state);copiar(ta.value,ta);break;}
-    case 'copia-restaurar':{
-      const txt=$('#copia-in').value.trim();
-      if(!txt){msg('#copia-msg','Pega primero el texto de la copia.');return;}
-      let dat;try{dat=JSON.parse(txt);}catch(e){msg('#copia-msg','El texto no es una copia válida.');return;}
-      if(!dat||!Array.isArray(dat.casos)){msg('#copia-msg','El texto no es una copia válida de este cuaderno.');return;}
-      confirmar('Restaurar copia','Se reemplazarán todos los datos actuales por los de la copia.','Restaurar',()=>{state=normalizar(dat);guardar();render();toast('Copia restaurada');});break;}
-    case 'borrar-todo':confirmar('Borrar todos los datos','Se eliminarán todos los casos, plazos y recursos de este navegador. Esta acción no se puede deshacer.','Borrar todo',()=>{state=normalizar(null);guardar();ui.caseId=null;render();toast('Datos borrados');});break;
+      
+    case 'logout':
+      ui.loggedIn = false;
+      render();
+      toast('Sesión cerrada');
+      break;
   }
+}
+
+// Simulador temporal de Login
+const loginForm = document.getElementById('login-form');
+if(loginForm) {
+  loginForm.addEventListener('submit', e => {
+    e.preventDefault();
+    // Aquí pondremos más adelante el código de Supabase
+    ui.loggedIn = true;
+    render();
+    toast('Bienvenido');
+  });
 }
 
 document.addEventListener('click',e=>{
