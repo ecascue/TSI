@@ -618,6 +618,57 @@ function nuevoCaso(){
 function accion(a,el){
   const c=ui.caseId?getCaso(ui.caseId):null;
   switch(a){
+    case 'doc-upload': {
+      const nombreInput = $('#doc-nombre-archivo');
+      const fileInput = $('#doc-file-input');
+      const msg = $('#doc-subida-msg');
+      
+      const nombreDoc = nombreInput.value.trim();
+      const file = fileInput.files[0];
+
+      if(!file) {
+        msg.textContent = 'Por favor, selecciona un archivo.';
+        return;
+      }
+      if(!nombreDoc) {
+        msg.textContent = 'Indica un nombre o descripción para el documento.';
+        nombreInput.focus();
+        return;
+      }
+
+      msg.textContent = 'Subiendo archivo a Supabase...';
+
+      // Creamos una ruta única para el archivo dentro del bucket
+      const filePath = c.id + '/' + Date.now() + '_' + file.name;
+
+      supabase.storage
+        .from('documentos-casos')
+        .upload(filePath, file)
+        .then(async ({ data, error }) => {
+          if (error) {
+            msg.textContent = 'Error al subir el archivo: ' + error.message;
+            return;
+          }
+
+          // Obtenemos la URL pública o firmada para poder descargarlo/verlo
+          const { data: urlData } = supabase.storage
+            .from('documentos-casos')
+            .getPublicUrl(filePath);
+
+          c.docs.push({
+            id: uid(),
+            t: nombreDoc,
+            ok: true, // Se marca como aportado directamente al subirlo
+            url: urlData.publicUrl,
+            path: filePath
+          });
+
+          tocar(c);
+          render(true);
+          toast('¡Documento real subido con éxito!');
+        });
+      break;
+    }
     case 'nav':ui.view=el.dataset.v;ui.caseId=null;render();$('#main').focus({preventScroll:true});break;
     case 'ir-casos':ui.f=el.dataset.f||ui.f;ui.q='';ui.view='casos';ui.caseId=null;render();break;
     case 'ir-plazos':ui.view='plazos';ui.caseId=null;render();break;
