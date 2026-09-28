@@ -3,9 +3,8 @@
 
 // --- 1. INICIALIZAR SUPABASE ---
 const supabaseUrl = 'https://fvowpkbezdiyhxuflqbp.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2b3dwa2JlemRpeWh4dWZscWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MjU0NjYsImV4cCI6MjEwNTUwMTQ2Nn0.m5x8WpOASKkJVDeC5yO8xPCkwLkQ6_cKrc-IGmZSD0A';
+const supabaseKey = 'sb_publishable_p05XNIc3HFe4jNEP3z1DoA_ta9pI6wr';
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
 /* ---------- Datos de referencia ---------- */
 const SIT={
   irregular:{t:'Sin autorización de residencia',s:'Sin autorización',c:'rojo'},
